@@ -238,10 +238,10 @@ export default function ClaimURLPage() {
         {/* Claim URL Form */}
         <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
-            Claim Your Unique URL
+           Choose Your Linkist Identity
           </h1>
           <p className="text-gray-600 mb-8">
-            Your Linkist URL is your personal digital handshake. Make it memorable.
+            Change description to “Your Linkist ID is your personal digital handshake. Make it memorable.
           </p>
 
           <div className="mb-8">

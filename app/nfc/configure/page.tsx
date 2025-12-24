@@ -1,15 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import PersonIcon from '@mui/icons-material/Person';
 import PaletteIcon from '@mui/icons-material/Palette';
 import BrushIcon from '@mui/icons-material/Brush';
 import GridOnIcon from '@mui/icons-material/GridOn';
 import WarningIcon from '@mui/icons-material/Warning';
 import InfoIcon from '@mui/icons-material/Info';
+import StarsIcon from '@mui/icons-material/Stars';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
+
+// Lazy load CompanyLogoUpload for performance
+const CompanyLogoUpload = dynamic(() => import('@/components/CompanyLogoUpload'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-24 bg-gray-50 rounded-lg flex items-center justify-center">
+      <span className="text-sm text-gray-400">Loading...</span>
+    </div>
+  )
+});
 
 // Icon aliases
 const Person = PersonIcon;
@@ -18,6 +30,7 @@ const Brush = BrushIcon;
 const GridPattern = GridOnIcon;
 const Warning = WarningIcon;
 const Info = InfoIcon;
+const Crown = StarsIcon;
 
 // Define types for our configuration
 type BaseMaterial = 'pvc' | 'wood' | 'metal';
@@ -61,6 +74,12 @@ export default function ConfigureNewPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFoundingMember, setIsFoundingMember] = useState(false);
 
+  // Founding Member exclusive states
+  const [showLinkistLogo, setShowLinkistLogo] = useState(true);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+
   // Product Plan Price (Physical Card + Digital Profile)
   const PRODUCT_PLAN_PRICE = 69;
 
@@ -83,6 +102,17 @@ export default function ConfigureNewPage() {
           const foundingMemberStatus = data.user?.is_founding_member || false;
           setIsFoundingMember(foundingMemberStatus);
           console.log('Configure: Founding member status:', foundingMemberStatus);
+
+          // Pre-select Metal + Matte + Black for founding members
+          if (foundingMemberStatus) {
+            setFormData(prev => ({
+              ...prev,
+              baseMaterial: 'metal',
+              texture: 'matte',
+              colour: 'black-metal'
+            }));
+            console.log('Configure: Pre-selected Metal card for founding member');
+          }
         }
       } catch (error) {
         console.log('Configure: Could not check founding member status');
@@ -229,6 +259,44 @@ export default function ConfigureNewPage() {
     setFormData({ ...formData, pattern: patternId });
   };
 
+  // Company logo upload handler (Founders only)
+  const handleCompanyLogoUpload = useCallback(async (file: File) => {
+    setIsUploadingLogo(true);
+    setLogoUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'logos');
+      formData.append('isPublic', 'true');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        setLogoUploadError(result.error || 'Upload failed');
+        return;
+      }
+
+      setCompanyLogoUrl(result.data?.publicUrl || result.publicUrl);
+    } catch (error) {
+      setLogoUploadError('Failed to upload logo');
+      console.error('Logo upload error:', error);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  }, []);
+
+  // Remove company logo handler
+  const handleRemoveCompanyLogo = useCallback(() => {
+    setCompanyLogoUrl(null);
+    setLogoUploadError(null);
+  }, []);
+
   const getPrice = () => {
     if (!formData.baseMaterial) return 0;
     return prices[formData.baseMaterial];
@@ -322,7 +390,11 @@ export default function ConfigureNewPage() {
       baseMaterial: formData.baseMaterial,
       texture: formData.texture,
       colour: formData.colour,
-      pattern: selectedPattern?.name || `Pattern ${formData.pattern}`
+      pattern: selectedPattern?.name || `Pattern ${formData.pattern}`,
+      // Founding member exclusive options
+      showLinkistLogo: isFoundingMember ? showLinkistLogo : true,
+      companyLogoUrl: isFoundingMember ? companyLogoUrl : null,
+      isFoundingMember: isFoundingMember
     };
 
     console.log('Configure: Saving card data to localStorage:', configData);
@@ -422,7 +494,9 @@ export default function ConfigureNewPage() {
                       <div className="text-center">
                         <h3 className={`font-semibold text-sm ${formData.baseMaterial === material.value ? 'text-red-600' : 'text-gray-900'}`}>{material.label}</h3>
                         <p className="text-xs text-gray-500 mt-1 line-clamp-2">{material.description}</p>
-                        <div className="mt-3 text-lg font-bold text-gray-900">${prices[material.value]}</div>
+                        {!isFoundingMember && (
+                          <div className="mt-3 text-lg font-bold text-gray-900">${prices[material.value]}</div>
+                        )}
                       </div>
                     </button>
                   ))}
@@ -553,105 +627,185 @@ export default function ConfigureNewPage() {
               </div>
             </div>
 
+            {/* Founders Club Exclusive Options - Only visible to founding members */}
+            {isFoundingMember && (
+              <div className="bg-gradient-to-br from-amber-50 to-white rounded-xl shadow-sm border border-amber-200 overflow-hidden">
+                <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Crown className="mr-2 w-5 h-5 text-amber-500" /> Founders Club Exclusive
+                  </h2>
+                </div>
+                <div className="p-4 space-y-4">
+                  {/* Linkist Logo Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700">Linkist Logo</label>
+                      <p className="text-xs text-gray-500 mt-1">Show Linkist branding on card back</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowLinkistLogo(!showLinkistLogo)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                        showLinkistLogo ? 'bg-amber-500' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          showLinkistLogo ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Company Logo Upload */}
+                  <CompanyLogoUpload
+                    companyLogoUrl={companyLogoUrl}
+                    isUploading={isUploadingLogo}
+                    error={logoUploadError}
+                    onUpload={handleCompanyLogoUpload}
+                    onRemove={handleRemoveCompanyLogo}
+                  />
+
+                  {/* Info message */}
+                  <div className="p-2 bg-amber-100 border border-amber-300 rounded-lg">
+                    <p className="text-xs text-amber-800">
+                      {companyLogoUrl
+                        ? 'Your company logo will replace the Linkist logo on the card back.'
+                        : showLinkistLogo
+                          ? 'The Linkist logo will appear on the card back.'
+                          : 'No logo will appear on the card back.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Price Breakdown - After Pattern */}
             <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100 overflow-hidden">
               <div className="bg-gray-50 border-b border-gray-200 px-3 py-1.5">
-                <h3 className="text-sm font-semibold text-gray-900">Price Breakdown</h3>
+                <h3 className="text-sm font-semibold text-gray-900">{isFoundingMember ? 'Order Summary' : 'Price Breakdown'}</h3>
               </div>
               <div className="p-3">
-                {(() => {
-                  const priceSummary = calculatePriceSummary();
-                  const hasBase = formData.baseMaterial !== null;
-
-                  return (
-                    <div className="space-y-1.5 text-sm">
-                      {/* Material Price Only */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">
-                          Base Material x 1
-                        </span>
-                        <span className="font-semibold text-gray-900">
-                          {hasBase ? formatCurrency(getPrice()) : '—'}
-                        </span>
-                      </div>
-
-                      {/* Customization - Show as included */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">Customization</span>
-                        <span className="text-green-600 font-medium">Included</span>
-                      </div>
-
-                      {/* Shipping - Show as included */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">Shipping</span>
-                        <span className="text-green-600 font-medium">Included</span>
-                      </div>
-
-                      {/* Tax */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">
-                          {priceSummary ? priceSummary.taxLabel : 'VAT (5%)'}
-                        </span>
-                        <span className="font-semibold text-gray-900">
-                          {priceSummary ? formatCurrency(priceSummary.taxAmount) : '—'}
-                        </span>
-                      </div>
-
-                      {/* Total */}
-                      <div className="border-t pt-2 mt-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-gray-900">Total</span>
-                          <span className={`text-xl font-bold ${priceSummary ? 'text-red-500' : 'text-gray-400'}`}>
-                            {priceSummary ? formatCurrency(priceSummary.total) : '—'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Info about Tax based on region */}
-                      <div className="mt-2 p-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-xs text-blue-700 flex items-center">
-                          <Info className="mr-1 w-4 h-4" />
-                          {userCountry === 'India'
-                            ? 'GST (18%) will apply for deliveries to India'
-                            : userCountry === 'UAE'
-                            ? 'VAT (5%) will apply for deliveries to UAE'
-                            : `VAT (10%) will apply for international deliveries`
-                          }
+                {isFoundingMember ? (
+                  // Founders see simplified summary - no prices
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Premium Card</span>
+                      <span className="text-green-600 font-medium">Included in Membership</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Customization</span>
+                      <span className="text-green-600 font-medium">Included</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Shipping</span>
+                      <span className="text-green-600 font-medium">Included</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 flex items-center">
+                          <Crown className="mr-1 w-4 h-4" />
+                          Founders Club members enjoy complimentary premium cards
                         </p>
                       </div>
-
-                      {/* Warning about incomplete selections */}
-                      {(() => {
-                        const missingItems = [];
-                        if (!formData.cardFirstName?.trim() || !formData.cardLastName?.trim()) {
-                          missingItems.push('Card Name');
-                        }
-                        if (!formData.baseMaterial) {
-                          missingItems.push('Base Material');
-                        }
-                        if (!formData.texture) {
-                          missingItems.push('Texture');
-                        }
-                        if (!formData.colour) {
-                          missingItems.push('Colour');
-                        }
-                        if (!formData.pattern) {
-                          missingItems.push('Pattern');
-                        }
-
-                        if (missingItems.length > 0) {
-                          return (
-                            <div className="mt-2 p-1.5 bg-amber-50 border border-amber-200 rounded-lg">
-                              <p className="text-xs text-amber-700 flex items-center">
-                                <Warning className="mr-1 w-4 h-4" /> Please select: <span className="font-semibold ml-1">{missingItems.join(', ')}</span>
-                              </p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
                     </div>
-                  );
+                  </div>
+                ) : (
+                  // Regular users see full price breakdown
+                  (() => {
+                    const priceSummary = calculatePriceSummary();
+                    const hasBase = formData.baseMaterial !== null;
+
+                    return (
+                      <div className="space-y-1.5 text-sm">
+                        {/* Material Price Only */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">
+                            Base Material x 1
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {hasBase ? formatCurrency(getPrice()) : '—'}
+                          </span>
+                        </div>
+
+                        {/* Customization - Show as included */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Customization</span>
+                          <span className="text-green-600 font-medium">Included</span>
+                        </div>
+
+                        {/* Shipping - Show as included */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Shipping</span>
+                          <span className="text-green-600 font-medium">Included</span>
+                        </div>
+
+                        {/* Tax */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">
+                            {priceSummary ? priceSummary.taxLabel : 'VAT (5%)'}
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {priceSummary ? formatCurrency(priceSummary.taxAmount) : '—'}
+                          </span>
+                        </div>
+
+                        {/* Total */}
+                        <div className="border-t pt-2 mt-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-gray-900">Total</span>
+                            <span className={`text-xl font-bold ${priceSummary ? 'text-red-500' : 'text-gray-400'}`}>
+                              {priceSummary ? formatCurrency(priceSummary.total) : '—'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Info about Tax based on region */}
+                        <div className="mt-2 p-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-xs text-blue-700 flex items-center">
+                            <Info className="mr-1 w-4 h-4" />
+                            {userCountry === 'India'
+                              ? 'GST (18%) will apply for deliveries to India'
+                              : userCountry === 'UAE'
+                              ? 'VAT (5%) will apply for deliveries to UAE'
+                              : `VAT (10%) will apply for international deliveries`
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
+                {/* Warning about incomplete selections - always visible */}
+                {(() => {
+                  const missingItems = [];
+                  if (!formData.cardFirstName?.trim() || !formData.cardLastName?.trim()) {
+                    missingItems.push('Card Name');
+                  }
+                  if (!formData.baseMaterial) {
+                    missingItems.push('Base Material');
+                  }
+                  if (!formData.texture) {
+                    missingItems.push('Texture');
+                  }
+                  if (!formData.colour) {
+                    missingItems.push('Colour');
+                  }
+                  if (!formData.pattern) {
+                    missingItems.push('Pattern');
+                  }
+
+                  if (missingItems.length > 0) {
+                    return (
+                      <div className="mt-2 p-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 flex items-center">
+                          <Warning className="mr-1 w-4 h-4" /> Please select: <span className="font-semibold ml-1">{missingItems.join(', ')}</span>
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
                 })()}
 
                 <button
@@ -735,19 +889,34 @@ export default function ConfigureNewPage() {
                   {/* Back Card */}
                   <div>
                     <div className={`w-full aspect-[1.6/1] bg-gradient-to-br ${getCardGradient()} rounded-xl relative overflow-hidden shadow-lg`}>
-                      {/* Linkist Logo Center */}
+                      {/* Logo Section - Conditionally render based on founding member settings */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <img
-                          src="/logo_linkist.png"
-                          alt="Linkist"
-                          className="h-16 w-auto mb-4"
-                        />
-                        {isFoundingMember && (
-                          <div className={`${getTextColor()} text-sm font-medium tracking-wider`}>FOUNDING MEMBER</div>
+                        {isFoundingMember ? (
+                          // Founding Member: Show company logo, Linkist logo (if enabled), or nothing
+                          <>
+                            {companyLogoUrl ? (
+                              <img
+                                src={companyLogoUrl}
+                                alt="Company Logo"
+                                className="h-16 w-auto mb-4 object-contain"
+                              />
+                            ) : showLinkistLogo ? (
+                              <img
+                                src="/logo_linkist.png"
+                                alt="Linkist"
+                                className="h-16 w-auto mb-4"
+                              />
+                            ) : null}
+                            <div className={`${getTextColor()} text-sm font-medium tracking-wider`}>FOUNDING MEMBER</div>
+                          </>
+                        ) : (
+                          // Regular user: Always show Linkist logo
+                          <img
+                            src="/logo_linkist.png"
+                            alt="Linkist"
+                            className="h-16 w-auto mb-4"
+                          />
                         )}
-                        <div className="absolute bottom-1 right-4">
-                        {/* <img src="/nfc2.png" alt="NFC" className="w-12 h-12" /> */}
-                      </div>
                       </div>
 
                       {/* NFC Symbol - vertically centered on right side */}

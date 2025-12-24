@@ -2849,6 +2849,7 @@ function ProfileBuilderContent() {
                       <h3 className="text-base sm:text-lg font-semibold text-gray-900">Your Services</h3>
                       <button
                         onClick={() => {
+                          if (profileData.services.length >= 5) return;
                           const newService = {
                             id: Date.now().toString(),
                             title: '',
@@ -2864,10 +2865,15 @@ function ProfileBuilderContent() {
                             services: [...profileData.services, newService]
                           });
                         }}
-                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium whitespace-nowrap"
+                        disabled={profileData.services.length >= 5}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg transition text-sm font-medium whitespace-nowrap ${
+                          profileData.services.length >= 5
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-red-600 text-white hover:bg-red-700'
+                        }`}
                       >
                         <Plus className="w-4 h-4" />
-                        Add that
+                        Add service {profileData.services.length >= 5 ? '(Max 5)' : ''}
                       </button>
                     </div>
 
@@ -2876,42 +2882,18 @@ function ProfileBuilderContent() {
                           <div key={service.id} className="border border-gray-200 rounded-lg p-4 space-y-4">
                             <div className="flex items-center justify-between">
                               <h4 className="font-medium text-gray-900">Service {index + 1}</h4>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    const newService = {
-                                      id: Date.now().toString(),
-                                      title: '',
-                                      description: '',
-                                      pricing: '',
-                                      pricingUnit: '',
-                                      currency: defaultCurrency,
-                                      category: '',
-                                      showPublicly: true
-                                    };
-                                    setProfileData({
-                                      ...profileData,
-                                      services: [...profileData.services, newService]
-                                    });
-                                  }}
-                                  className="text-green-600 hover:text-green-700 p-1"
-                                  title="Add another service"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setProfileData({
-                                      ...profileData,
-                                      services: profileData.services.filter(s => s.id !== service.id)
-                                    });
-                                  }}
-                                  className="text-red-600 hover:text-red-700 p-1"
-                                  title="Delete service"
-                                >
-                                  <Trash className="w-4 h-4" />
-                                </button>
-                              </div>
+                              <button
+                                onClick={() => {
+                                  setProfileData({
+                                    ...profileData,
+                                    services: profileData.services.filter(s => s.id !== service.id)
+                                  });
+                                }}
+                                className="text-red-600 hover:text-red-700 p-1"
+                                title="Delete service"
+                              >
+                                <Trash className="w-4 h-4" />
+                              </button>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3055,20 +3037,20 @@ function ProfileBuilderContent() {
                               <label className="block text-sm font-medium text-gray-700 mb-2">
                                 Description
                                 <span className="text-xs text-gray-500 ml-2">
-                                  ({service.description.length}/250 characters)
+                                  ({service.description.length}/150 characters)
                                 </span>
                               </label>
                               <textarea
                                 value={service.description}
                                 onChange={(e) => {
-                                  if (e.target.value.length <= 250) {
+                                  if (e.target.value.length <= 150) {
                                     const updatedServices = profileData.services.map(s =>
                                       s.id === service.id ? { ...s, description: e.target.value } : s
                                     );
                                     setProfileData({ ...profileData, services: updatedServices });
                                   }
                                 }}
-                                maxLength={250}
+                                maxLength={150}
                                 rows={3}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none resize-none"
                                 placeholder="Describe your service..."

@@ -66,8 +66,13 @@ interface Order {
     quantity?: number;
     baseMaterial?: string;
     color?: string;
+    colour?: string;  // Configure page uses British spelling
     pattern?: string | number;
     texture?: string;
+    // Founding member fields
+    companyLogoUrl?: string | null;
+    showLinkistLogo?: boolean;
+    isFoundingMember?: boolean;
   };
   shipping: {
     fullName: string;
@@ -695,6 +700,15 @@ export default function OrdersPage() {
                     <p className="text-xs text-gray-500 mb-1">Name on Card</p>
                     <p className="font-semibold text-gray-900">{selectedOrder.cardConfig.cardFirstName} {selectedOrder.cardConfig.cardLastName}</p>
                   </div>
+                  {/* Founding Member Badge */}
+                  {selectedOrder.cardConfig.isFoundingMember && (
+                    <div className="col-span-2 bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <p className="text-xs text-amber-600 mb-1">Member Type</p>
+                      <p className="font-semibold text-amber-800 flex items-center gap-2">
+                        ⭐ Founding Member
+                      </p>
+                    </div>
+                  )}
                   <div className="bg-white rounded-lg p-3 border border-blue-100">
                     <p className="text-xs text-gray-500 mb-1">Title</p>
                     <p className="font-medium text-gray-900">{selectedOrder.cardConfig.title || 'Professional'}</p>
@@ -709,7 +723,7 @@ export default function OrdersPage() {
                   </div>
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                     <p className="text-xs text-gray-500 mb-1">Color</p>
-                    <p className="font-semibold text-blue-900 capitalize">{selectedOrder.cardConfig.color || 'N/A'}</p>
+                    <p className="font-semibold text-blue-900 capitalize">{selectedOrder.cardConfig.colour || selectedOrder.cardConfig.color || 'N/A'}</p>
                   </div>
                   <div className="bg-green-50 rounded-lg p-3 border border-green-200">
                     <p className="text-xs text-gray-500 mb-1">Texture</p>
@@ -719,6 +733,29 @@ export default function OrdersPage() {
                     <p className="text-xs text-gray-500 mb-1">Pattern</p>
                     <p className="font-semibold text-orange-900 capitalize">{selectedOrder.cardConfig.pattern ? (typeof selectedOrder.cardConfig.pattern === 'string' ? selectedOrder.cardConfig.pattern : `Pattern ${selectedOrder.cardConfig.pattern}`) : 'N/A'}</p>
                   </div>
+                  {/* Logo Settings - Only for Founding Members */}
+                  {selectedOrder.cardConfig.isFoundingMember && (
+                    <>
+                      <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
+                        <p className="text-xs text-gray-500 mb-1">Linkist Logo</p>
+                        <p className="font-semibold text-indigo-900">
+                          {selectedOrder.cardConfig.showLinkistLogo !== false ? 'Show' : 'Hidden'}
+                        </p>
+                      </div>
+                      <div className="bg-pink-50 rounded-lg p-3 border border-pink-200">
+                        <p className="text-xs text-gray-500 mb-1">Company Logo</p>
+                        {selectedOrder.cardConfig.companyLogoUrl ? (
+                          <img
+                            src={selectedOrder.cardConfig.companyLogoUrl}
+                            alt="Company Logo"
+                            className="h-12 w-auto object-contain rounded"
+                          />
+                        ) : (
+                          <p className="font-medium text-gray-500 text-sm">None uploaded</p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 

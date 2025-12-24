@@ -232,7 +232,10 @@ export default function CheckoutPage() {
             // Founders Club data
             isFoundingMember: isFoundingMember,
             foundingMemberPlan: foundingMemberPlan,
-            foundersInviteCode: foundersInviteCode
+            foundersInviteCode: foundersInviteCode,
+            // Logo settings from configure page (Founders Club exclusive)
+            showLinkistLogo: config.showLinkistLogo,
+            companyLogoUrl: config.companyLogoUrl
           };
 
           console.log('Checkout: Processed card config for preview:', processedConfig);
