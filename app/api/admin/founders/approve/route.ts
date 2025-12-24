@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     try {
       const emailResult = await sendOrderEmail({
         to: foundersRequest.email,
-        subject: 'Your Founders Club Invite Code - Linkist',
+        subject: "You're approved — unlock your Founders Club access",
         html: getEmailTemplate(foundersRequest.full_name, inviteCode, expiresAt)
       });
 
@@ -145,15 +145,8 @@ export async function POST(request: NextRequest) {
 }
 
 function getEmailTemplate(name: string, code: string, expiresAt: Date): string {
-  const formattedExpiry = expiresAt.toLocaleString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short'
-  });
+  // Extract first name from full name
+  const firstName = name ? name.split(' ')[0] : 'there';
 
   return `
 <!DOCTYPE html>
@@ -161,7 +154,7 @@ function getEmailTemplate(name: string, code: string, expiresAt: Date): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Founders Club Invite Code</title>
+  <title>You're approved — unlock your Founders Club access</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
@@ -173,48 +166,74 @@ function getEmailTemplate(name: string, code: string, expiresAt: Date): string {
     <tr>
       <td style="padding: 40px 30px;">
         <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 20px;">
-          Hi ${name},
+          Hi ${firstName},
         </p>
         <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 20px;">
-          Great news! Your request to join the exclusive Linkist Founders Club has been approved.
+          Great news — your request to join the Linkist Founders Club has been approved.
         </p>
-        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 30px;">
-          Use the following invite code to unlock your Founders Club access:
+        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 15px;">
+          Your exclusive Founders Club invite code is:
         </p>
 
         <div style="background-color: #fef3c7; border: 2px dashed #f59e0b; border-radius: 12px; padding: 25px; text-align: center; margin: 0 0 30px;">
-          <p style="color: #92400e; font-size: 14px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 1px;">Your Invite Code</p>
           <p style="color: #78350f; font-size: 32px; font-weight: bold; margin: 0; font-family: monospace; letter-spacing: 3px;">${code}</p>
         </div>
 
-        <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 0 0 30px;">
-          <p style="color: #991b1b; font-size: 14px; margin: 0;">
-            <strong>Important:</strong> This code expires on ${formattedExpiry}. Please use it within 72 hours.
-          </p>
+        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 25px;">
+          You can get started right away by unlocking your access and customising your NFC card.
+        </p>
+
+        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 15px;">
+          Click the button below to proceed directly to your Founders Club card customisation:
+        </p>
+
+        <div style="text-align: center; margin: 0 0 30px;">
+          <a href="http://localhost:3000/product-selection" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-weight: bold; font-size: 16px;">
+            Unlock Founders Club & Customise Card
+          </a>
         </div>
 
         <h3 style="color: #333333; font-size: 18px; margin: 0 0 15px;">How to use your code:</h3>
         <ol style="color: #666666; font-size: 14px; line-height: 24px; margin: 0 0 30px; padding-left: 20px;">
-          <li style="margin-bottom: 10px;">Go to the Linkist product selection page</li>
+          <li style="margin-bottom: 10px;">Go to the Linkist plan selection page</li>
           <li style="margin-bottom: 10px;">Click "Enter Code" on the Founders Club card</li>
-          <li style="margin-bottom: 10px;">Enter your code and email to unlock access</li>
-          <li>Enjoy exclusive Founders Club benefits!</li>
+          <li style="margin-bottom: 10px;">Enter your email and invite code to unlock access</li>
+          <li>Enjoy exclusive Founders Club benefits</li>
         </ol>
 
         <h3 style="color: #333333; font-size: 18px; margin: 0 0 15px;">Your Founders Club Benefits:</h3>
         <ul style="color: #666666; font-size: 14px; line-height: 24px; margin: 0 0 30px; padding-left: 20px;">
-          <li style="margin-bottom: 8px;">✨ Exclusive "Founders" tag on your NFC card</li>
-          <li style="margin-bottom: 8px;">🎨 Access to exclusive Black card colors</li>
-          <li style="margin-bottom: 8px;">💰 Lifetime 50% discount on all products</li>
-          <li style="margin-bottom: 8px;">⚡ Priority 24/7 support</li>
-          <li>🚀 Early access to new features</li>
+          <li style="margin-bottom: 8px;">Lifetime subscription to the Linkist Pro App</li>
+          <li style="margin-bottom: 8px;">Premium Metal NFC Card</li>
+          <li style="margin-bottom: 8px;">"Founding Member" tag on your card</li>
+          <li style="margin-bottom: 8px;">No expiry on AI credits</li>
+          <li style="margin-bottom: 8px;">Fully customisable card</li>
+          <li>Up to 3 referral invites to the Founders Club</li>
         </ul>
 
-        <div style="text-align: center;">
-          <a href="https://linkist.ai/product-selection" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-weight: bold; font-size: 16px;">
-            Unlock Founders Club Access →
-          </a>
+        <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 0 0 30px;">
+          <p style="color: #991b1b; font-size: 14px; margin: 0 0 8px;">
+            <strong>Important details:</strong>
+          </p>
+          <ul style="color: #991b1b; font-size: 14px; margin: 0; padding-left: 20px;">
+            <li style="margin-bottom: 5px;">This invite code is time-bound and will expire in 72 hours.</li>
+            <li>The code can be used only once.</li>
+          </ul>
         </div>
+
+        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 20px;">
+          We're excited to welcome you as a Founding Member.
+        </p>
+
+        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 5px;">
+          Warm regards,
+        </p>
+        <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 5px; font-weight: bold;">
+          The Linkist Team
+        </p>
+        <p style="color: #666666; font-size: 14px; font-style: italic; margin: 0;">
+          Connect Smarter. Network Better.
+        </p>
       </td>
     </tr>
     <tr>
