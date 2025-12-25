@@ -63,6 +63,7 @@ interface SubscriptionPlan {
   popular: boolean;
   allowed_countries: string[];
   display_order: number;
+  founders_total_price: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,7 +93,8 @@ export default function ProductsPage() {
     status: 'draft' as 'active' | 'inactive' | 'draft',
     popular: false,
     allowed_countries: ['India', 'UAE', 'USA', 'UK'],
-    display_order: 1
+    display_order: 1,
+    founders_total_price: null as number | null
   });
   const [productFormData, setProductFormData] = useState({
     sku: '',
@@ -262,7 +264,8 @@ export default function ProductsPage() {
         status: formData.status,
         popular: formData.popular,
         allowed_countries: formData.allowed_countries,
-        display_order: formData.display_order
+        display_order: formData.display_order,
+        founders_total_price: formData.type === 'founders-club' ? formData.founders_total_price : null
       };
 
       const response = await fetch(endpoint, {
@@ -303,7 +306,8 @@ export default function ProductsPage() {
       status: plan.status,
       popular: plan.popular,
       allowed_countries: plan.allowed_countries,
-      display_order: plan.display_order || 1
+      display_order: plan.display_order || 1,
+      founders_total_price: plan.founders_total_price || null
     });
     setShowEditModal(true);
   };
@@ -342,7 +346,8 @@ export default function ProductsPage() {
       status: 'draft',
       popular: false,
       allowed_countries: ['India', 'UAE', 'USA', 'UK'],
-      display_order: plans.length > 0 ? Math.max(...plans.map(p => p.display_order)) + 1 : 1
+      display_order: plans.length > 0 ? Math.max(...plans.map(p => p.display_order)) + 1 : 1,
+      founders_total_price: null
     });
   };
 
@@ -756,7 +761,11 @@ export default function ProductsPage() {
                           <span className="text-sm text-gray-900">{getPlanTypeLabel(plan.type)}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-gray-900">${plan.price}</span>
+                          <span className="text-sm font-medium text-gray-900">
+                            ${plan.type === 'founders-club' && plan.founders_total_price
+                              ? plan.founders_total_price
+                              : plan.price}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm text-gray-600">{plan.features.length} features</span>
@@ -862,6 +871,28 @@ export default function ProductsPage() {
                       required
                     />
                   </div>
+
+                  {/* Founders Club Total Price - Only shown for founders-club type */}
+                  {formData.type === 'founders-club' && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <label className="block text-sm font-medium text-amber-800 mb-2">
+                        Founders Club Total Price (USD) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.founders_total_price || ''}
+                        onChange={(e) => setFormData({ ...formData, founders_total_price: parseFloat(e.target.value) || null })}
+                        className="w-full border border-amber-300 rounded-md px-3 py-2 bg-white"
+                        placeholder="100.00"
+                      />
+                      <p className="text-xs text-amber-700 mt-2">
+                        Set the total price for Founders Club members. The system will automatically calculate:<br />
+                        • India: Base = Total - 18% GST (e.g., $100 → $82 base + $18 GST)<br />
+                        • US/UK/UAE: Base = Total - 5% VAT (e.g., $100 → $95 base + $5 VAT)
+                      </p>
+                    </div>
+                  )}
 
                   {/* GST and VAT */}
                   <div className="grid grid-cols-2 gap-4">

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useToast } from '@/components/ToastProvider';
 import { UserStore } from '@/lib/user-store';
+import { getTaxRate } from '@/lib/country-utils';
 import LockIcon from '@mui/icons-material/Lock';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Footer from '@/components/Footer';
@@ -164,7 +165,8 @@ export default function CheckoutPage() {
   };
 
   const calculateTax = () => {
-    return calculateSubtotal() * 0.05; // 5% VAT as specified in requirements
+    const taxInfo = getTaxRate(formData.country);
+    return calculateSubtotal() * taxInfo.rate;
   };
 
   const calculateTotal = () => {

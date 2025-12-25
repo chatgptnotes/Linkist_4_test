@@ -8,8 +8,9 @@ import * as z from 'zod';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Footer from '@/components/Footer';
-import { Country, State, City } from 'country-state-city';
+// country-state-city moved to LocationDropdowns component for code-splitting
 import { getOrderAmountForVoucher, calculatePricing } from '@/lib/pricing-utils';
+import { getTaxRate } from '@/lib/country-utils';
 // PIN verification removed - no longer needed
 
 // Dynamically import MapPicker to avoid SSR issues
@@ -35,6 +36,24 @@ const GoogleMapPicker = dynamic(() => import('@/components/GoogleMapPicker'), {
     </div>
   ),
 });
+
+// Dynamically import LocationDropdowns to reduce bundle size (country-state-city is ~8MB)
+const LocationDropdowns = dynamic(() => import('@/components/LocationDropdowns'), {
+  ssr: false,
+  loading: () => (
+    <div className="space-y-4 animate-pulse">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="h-10 bg-gray-200 rounded-lg"></div>
+        <div className="h-10 bg-gray-200 rounded-lg"></div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="h-10 bg-gray-200 rounded-lg"></div>
+      </div>
+    </div>
+  ),
+});
+
+import type { LocationDropdownsRef } from '@/components/LocationDropdowns';
 
 const checkoutSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -100,15 +119,8 @@ export default function CheckoutPage() {
     area?: string;
   }>({});
 
-  // Location dropdown states
-  const [selectedCountry, setSelectedCountry] = useState<string>('IN'); // FIXED: Initialize with India default
-  const [selectedState, setSelectedState] = useState<string>('');
-  const [selectedCity, setSelectedCity] = useState<string>('');
-  const [availableStates, setAvailableStates] = useState<any[]>([]);
-  const [availableCities, setAvailableCities] = useState<any[]>([]);
-  const [isUpdatingFromMap, setIsUpdatingFromMap] = useState(false);
-  const previousStateRef = useRef<string>('');
-  const previousCountryRef = useRef<string>('');
+  // Ref for LocationDropdowns component (for map address updates)
+  const locationDropdownsRef = useRef<LocationDropdownsRef>(null);
 
   // PIN modal and related state removed - no longer needed
   // const [step, setStep] = useState<'shipping' | 'payment' | 'review'>('shipping');
@@ -146,15 +158,7 @@ export default function CheckoutPage() {
   const quantity = watchedValues.quantity || 1;
   const isFounderMember = watchedValues.isFounderMember || false;
 
-  // FIXED: Keep country dropdown state in sync with form value
-  useEffect(() => {
-    if (watchedValues.country && selectedCountry !== watchedValues.country) {
-      setSelectedCountry(watchedValues.country);
-      previousCountryRef.current = watchedValues.country; // Track country change
-      const states = State.getStatesOfCountry(watchedValues.country);
-      setAvailableStates(states);
-    }
-  }, [watchedValues.country, selectedCountry]);
+  // Location dropdown sync moved to LocationDropdowns component
 
   useEffect(() => {
     console.log('Checkout: Loading configuration data...');
@@ -221,6 +225,9 @@ export default function CheckoutPage() {
           const foundingMemberPlan = localStorage.getItem('foundingMemberPlan') || 'lifetime';
           const foundersInviteCode = localStorage.getItem('foundersInviteCode') || '';
 
+          // Use founders data from config (saved by configure page) OR from localStorage
+          const configIsFoundingMember = config.isFoundingMember || isFoundingMember;
+
           const processedConfig = {
             cardFirstName: config.cardFirstName,
             cardLastName: config.cardLastName,
@@ -230,12 +237,15 @@ export default function CheckoutPage() {
             color: config.colour || config.color,  // Handle both colour and color
             fullName: `${config.cardFirstName} ${config.cardLastName}`.trim(),
             // Founders Club data
-            isFoundingMember: isFoundingMember,
+            isFoundingMember: configIsFoundingMember,
             foundingMemberPlan: foundingMemberPlan,
             foundersInviteCode: foundersInviteCode,
             // Logo settings from configure page (Founders Club exclusive)
             showLinkistLogo: config.showLinkistLogo,
-            companyLogoUrl: config.companyLogoUrl
+            companyLogoUrl: config.companyLogoUrl,
+            // Founders pricing (for checkout/payment) - saved by configure page
+            foundersTotalPrice: config.foundersTotalPrice || null,
+            foundersPricing: config.foundersPricing || null
           };
 
           console.log('Checkout: Processed card config for preview:', processedConfig);
@@ -462,57 +472,33 @@ export default function CheckoutPage() {
     }
   }, [voucherValid, voucherCode, voucherDiscount, voucherDiscountAmount, voucherType]);
 
-  // Handle country change - load states for selected country
-  useEffect(() => {
-    // Only clear state/city if country VALUE actually changed (not just isUpdatingFromMap flag)
-    if (selectedCountry && selectedCountry !== previousCountryRef.current && !isUpdatingFromMap) {
-      const states = State.getStatesOfCountry(selectedCountry);
-      setAvailableStates(states);
-      setSelectedState(''); // Reset state when country changes
-      setSelectedCity(''); // Reset city when country changes
-      setValue('stateProvince', ''); // Update form value
-      setValue('city', ''); // Update form value
-
-      // For UAE, use Emirates as cities directly (UAE has no state/province level)
-      if (selectedCountry === 'AE') {
-        const emiratesAsCities = states.map(state => ({
-          name: state.name.replace(' Emirate', ''), // "Abu Dhabi Emirate" → "Abu Dhabi"
-          stateCode: state.isoCode,
-          countryCode: state.countryCode
-        }));
-        setAvailableCities(emiratesAsCities as any);
-      } else {
-        setAvailableCities([]);
-      }
-
-      // Update previous country ref
-      previousCountryRef.current = selectedCountry;
-    }
-  }, [selectedCountry, setValue, isUpdatingFromMap]);
-
-  // Handle state change - load cities for selected state
-  useEffect(() => {
-    if (selectedCountry && selectedState && !isUpdatingFromMap) {
-      // Only reset city if the state actually changed (user manually changed it)
-      const stateChanged = previousStateRef.current !== '' && previousStateRef.current !== selectedState;
-
-      const cities = City.getCitiesOfState(selectedCountry, selectedState);
-      setAvailableCities(cities);
-
-      // Only reset city if user manually changed the state dropdown
-      if (stateChanged) {
-        setSelectedCity('');
-        setValue('city', '');
-      }
-
-      // Update the previous state ref
-      previousStateRef.current = selectedState;
-    }
-  }, [selectedState, selectedCountry, setValue, isUpdatingFromMap]);
+  // Country/state change logic moved to LocationDropdowns component
 
   const getPricingBreakdown = () => {
-    // Use unified pricing calculation from pricing-utils
-    // FIXED: Don't include app subscription in checkout page display
+    // Check if we have founders pricing from configure page
+    const hasFoundersPricing = userIsFoundingMember && cardConfig?.foundersPricing;
+
+    if (hasFoundersPricing && cardConfig.foundersPricing) {
+      // Use founders pricing ($149 total with back-calculated base)
+      const fp = cardConfig.foundersPricing;
+      return {
+        productPlanPrice: 0,
+        materialPrice: fp.basePrice,
+        appSubscriptionPrice: 0, // Included in founders price
+        basePrice: fp.basePrice,
+        subtotal: fp.basePrice,
+        taxAmount: fp.taxAmount,
+        shippingCost: 0,
+        totalBeforeDiscount: fp.total,
+        discountAmount: 0,
+        total: fp.total,
+        taxRate: fp.taxRate,
+        taxLabel: fp.taxLabel,
+        isFoundersPricing: true
+      };
+    }
+
+    // Standard pricing calculation for regular users
     const pricing = calculatePricing({
       cardConfig: {
         baseMaterial: (cardConfig?.baseMaterial as any) || 'pvc',
@@ -536,7 +522,8 @@ export default function CheckoutPage() {
       discountAmount: 0,
       total: pricing.subtotal + pricing.taxAmount, // Only material + tax
       taxRate: pricing.taxRate,
-      taxLabel: watchedValues.country === 'IN' ? 'GST (18%)' : 'VAT (5%)'
+      taxLabel: getTaxRate(watchedValues.country).label,
+      isFoundersPricing: false
     };
   };
 
@@ -614,132 +601,17 @@ export default function CheckoutPage() {
 
   const pricing = getPricingBreakdown();
 
-  // Handle address update from map
+  // Handle address update from map - delegates to LocationDropdowns component
   const handleMapAddressChange = (addressData: any) => {
-    console.log('📍 Map address changed:', addressData);
-    console.log('📍 Full address data:', JSON.stringify(addressData, null, 2));
-
-    // Set flag to prevent useEffect from resetting values
-    setIsUpdatingFromMap(true);
-
-    // Update form fields with address from map
-    if (addressData.addressLine1) setValue('addressLine1', addressData.addressLine1);
-    if (addressData.addressLine2) setValue('addressLine2', addressData.addressLine2);
-    if (addressData.postalCode) setValue('postalCode', addressData.postalCode);
-
-    // Update country dropdown
-    if (addressData.countryCode) {
-      const country = Country.getAllCountries().find(c => c.isoCode === addressData.countryCode);
-
-      if (!country) {
-        console.error('❌ Country not found for code:', addressData.countryCode);
-        setIsUpdatingFromMap(false);
-        return;
-      }
-
-      console.log('🌍 Country found:', country.isoCode, country.name);
-
-      // Set country
-      setSelectedCountry(country.isoCode);
-      previousCountryRef.current = country.isoCode; // Track country change
-      setValue('country', country.isoCode);
-
-      // Get available states for the selected country
-      const states = State.getStatesOfCountry(country.isoCode);
-      console.log(`📍 Found ${states.length} states for ${country.name}`);
-      setAvailableStates(states);
-
-      // Update state dropdown if state data is available
-      if (addressData.stateProvince) {
-        console.log('📍 Looking for state:', addressData.stateProvince);
-
-        if (states.length === 0) {
-          console.log('⚠️ No states available in library, setting directly');
-          setSelectedState(addressData.stateProvince);
-          previousStateRef.current = addressData.stateProvince;
-          setValue('stateProvince', addressData.stateProvince);
-          // Also try to set city if provided
-          if (addressData.city) {
-            setValue('city', addressData.city);
-            setSelectedCity(addressData.city);
-          }
-        } else {
-          // Try to find state by name or ISO code
-          const state = states.find(s =>
-            s.name.toLowerCase() === addressData.stateProvince.toLowerCase() ||
-            s.isoCode.toLowerCase() === addressData.stateProvince.toLowerCase()
-          );
-
-          if (state) {
-            console.log('✅ State found:', state.isoCode, state.name);
-
-            // Get available cities for the selected state
-            const cities = City.getCitiesOfState(country.isoCode, state.isoCode);
-            console.log(`🏙️ Found ${cities.length} cities for ${state.name}`);
-
-            // Set state AFTER getting cities to avoid race condition
-            setSelectedState(state.isoCode);
-            previousStateRef.current = state.isoCode;
-            setValue('stateProvince', state.name);
-            setAvailableCities(cities);
-
-            // Update city dropdown if city data is available
-            if (addressData.city) {
-              console.log('🏙️ Looking for city:', addressData.city);
-
-              if (cities.length === 0) {
-                console.log('⚠️ No cities available in library, setting directly');
-                setSelectedCity(addressData.city);
-                setValue('city', addressData.city);
-              } else {
-                const city = cities.find(c =>
-                  c.name.toLowerCase() === addressData.city.toLowerCase()
-                );
-
-                if (city) {
-                  console.log('✅ City found:', city.name);
-                  setSelectedCity(city.name);
-                  setValue('city', city.name);
-                } else {
-                  console.log('⚠️ City not found in library, setting directly:', addressData.city);
-                  setSelectedCity(addressData.city);
-                  setValue('city', addressData.city);
-                }
-              }
-            }
-          } else {
-            console.log('⚠️ State not found in library, setting directly:', addressData.stateProvince);
-            setSelectedState(addressData.stateProvince);
-            previousStateRef.current = addressData.stateProvince;
-            setValue('stateProvince', addressData.stateProvince);
-
-            // Also set city directly if provided
-            if (addressData.city) {
-              setSelectedCity(addressData.city);
-              setValue('city', addressData.city);
-            }
-          }
-        }
-      } else if (addressData.city) {
-        // No state provided but city is available
-        console.log('🏙️ Setting city without state:', addressData.city);
-        setSelectedCity(addressData.city);
-        setValue('city', addressData.city);
-      }
+    // Forward to LocationDropdowns component via ref
+    if (locationDropdownsRef.current) {
+      locationDropdownsRef.current.handleMapAddressChange(addressData);
     }
+  };
 
-    // Store GPS coordinates and area
-    setGpsCoordinates({
-      latitude: addressData.latitude,
-      longitude: addressData.longitude,
-      area: addressData.area,
-    });
-
-    // Reset flag after a longer delay to ensure all state updates have completed
-    setTimeout(() => {
-      setIsUpdatingFromMap(false);
-      console.log('✅ Map update complete');
-    }, 300);
+  // Handle GPS coordinates update from LocationDropdowns
+  const handleGpsCoordinatesChange = (coords: { latitude?: number; longitude?: number; area?: string }) => {
+    setGpsCoordinates(coords);
   };
 
   // PIN verification function removed - no longer needed
@@ -844,17 +716,65 @@ export default function CheckoutPage() {
       localStorage.setItem('userContactData', JSON.stringify(userContactData));
       console.log('💾 Checkout: Saved user contact data to localStorage:', userContactData);
 
-      // FIXED: Calculate full pricing WITH subscription for payment page
-      // (even though checkout page only displays material + tax)
-      const fullPricing = calculatePricing({
-        cardConfig: {
-          baseMaterial: (cardConfig?.baseMaterial as any) || 'pvc',
-          quantity: quantity,
-        },
-        country: formData.country || 'US',
-        isFoundingMember: userIsFoundingMember,
-        includeAppSubscription: true, // Include subscription for payment page
-      });
+      // Check if we have founders pricing from configure page
+      const hasFoundersPricing = userIsFoundingMember && cardConfig?.foundersPricing;
+
+      // Calculate full pricing
+      // For founders: use the $149 (or whatever admin set) founders pricing
+      // For regular users: use standard pricing calculation
+      let fullPricing;
+      let pricingData;
+
+      if (hasFoundersPricing && cardConfig.foundersPricing) {
+        // Use founders pricing from configure page ($149 total with back-calculated base)
+        const fp = cardConfig.foundersPricing;
+        console.log('🏆 Checkout: Using FOUNDERS pricing:', fp);
+        pricingData = {
+          productPlanPrice: 0,
+          materialPrice: fp.basePrice,
+          appSubscriptionPrice: 0, // Included in founders price
+          basePrice: fp.basePrice,
+          subtotal: fp.basePrice,
+          shippingCost: 0,
+          taxAmount: fp.taxAmount,
+          totalBeforeDiscount: fp.total,
+          discountAmount: 0,
+          total: fp.total,
+          taxRate: fp.taxRate,
+          taxLabel: fp.taxLabel,
+          voucherCode: null,
+          voucherDiscount: 0,
+          isFoundersPricing: true
+        };
+      } else {
+        // Standard pricing calculation for regular users
+        fullPricing = calculatePricing({
+          cardConfig: {
+            baseMaterial: (cardConfig?.baseMaterial as any) || 'pvc',
+            quantity: quantity,
+          },
+          country: formData.country || 'US',
+          isFoundingMember: userIsFoundingMember,
+          includeAppSubscription: true,
+        });
+        pricingData = {
+          productPlanPrice: 0,
+          materialPrice: fullPricing.materialPrice,
+          appSubscriptionPrice: fullPricing.appSubscriptionPrice,
+          basePrice: fullPricing.materialPrice,
+          subtotal: fullPricing.subtotal,
+          shippingCost: fullPricing.shippingCost,
+          taxAmount: fullPricing.taxAmount,
+          totalBeforeDiscount: fullPricing.totalBeforeDiscount,
+          discountAmount: 0,
+          total: fullPricing.totalBeforeDiscount,
+          taxRate: fullPricing.taxRate,
+          taxLabel: getTaxRate(formData.country).label,
+          voucherCode: null,
+          voucherDiscount: 0,
+          isFoundersPricing: false
+        };
+      }
 
       // Prepare order data for API
       const orderPayload = {
@@ -881,22 +801,7 @@ export default function CheckoutPage() {
           longitude: gpsCoordinates.longitude,
           area: gpsCoordinates.area
         },
-        pricing: {
-          productPlanPrice: 0,
-          materialPrice: fullPricing.materialPrice,
-          appSubscriptionPrice: fullPricing.appSubscriptionPrice, // Include subscription for payment page
-          basePrice: fullPricing.materialPrice,
-          subtotal: fullPricing.subtotal,
-          shippingCost: fullPricing.shippingCost,
-          taxAmount: fullPricing.taxAmount, // Tax only on material price
-          totalBeforeDiscount: fullPricing.totalBeforeDiscount,
-          discountAmount: 0, // No discount on checkout
-          total: fullPricing.totalBeforeDiscount, // Full price with subscription for payment page
-          taxRate: fullPricing.taxRate,
-          taxLabel: formData.country === 'IN' ? 'GST (18%)' : 'VAT (5%)',
-          voucherCode: null, // Payment page handles vouchers
-          voucherDiscount: 0 // Payment page handles vouchers
-        },
+        pricing: pricingData,
         isFounderMember: formData.isFounderMember
       };
 
@@ -941,13 +846,13 @@ export default function CheckoutPage() {
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-opacity duration-300 relative z-0 ${isLoading ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* Checkout Header - Centered above everything */}
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">Complete Your Order</h2>
-          <p className="text-gray-600 mt-2">Fill in your details to get your NFC card</p>
+          <h2 className="text-2xl font-bold text-gray-900">Shipping & Delivery</h2>
+          <p className="text-gray-600 mt-2">Enter your shipping and contact details</p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="max-w-xl mx-auto">
           {/* Order Form */}
-          <div className="space-y-6 order-2 lg:order-1">
+          <div className="space-y-6">
 
             <form onSubmit={handleSubmit(processOrder)} className="space-y-6">
               {/* Contact Information */}
@@ -1090,86 +995,17 @@ export default function CheckoutPage() {
                       placeholder="Apt 4B"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* City/Emirate dropdown - full width for UAE */}
-                    <div className={selectedCountry === 'AE' ? 'col-span-2' : ''}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {selectedCountry === 'AE' ? 'Emirate *' : 'City *'}
-                      </label>
-                      <select
-                        value={selectedCity}
-                        onChange={(e) => {
-                          const cityName = e.target.value;
-                          setSelectedCity(cityName);
-                          setValue('city', cityName);
-                          // For UAE, also set stateProvince to the emirate name for database consistency
-                          if (selectedCountry === 'AE') {
-                            setValue('stateProvince', cityName);
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-                      >
-                        <option value="">{selectedCountry === 'AE' ? 'Select Emirate' : 'Select City'}</option>
-                        {/* Show selected city even if not in library */}
-                        {selectedCity && !availableCities.find(c => c.name === selectedCity) && (
-                          <option value={selectedCity}>{selectedCity}</option>
-                        )}
-                        {availableCities.map((city) => (
-                          <option key={city.name} value={city.name}>
-                            {city.name}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.city && (
-                        <p className="text-red-500 text-sm mt-1">{errors.city.message}</p>
-                      )}
-                      {selectedCity && !availableCities.find(c => c.name === selectedCity) && (
-                        <p className="text-xs text-gray-500 mt-1">{selectedCountry === 'AE' ? 'Emirate' : 'City'} auto-filled from map (you can change if needed)</p>
-                      )}
-                    </div>
-                    {/* State/Province dropdown - hidden for UAE */}
-                    {selectedCountry !== 'AE' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          State/Province
-                        </label>
-                        <select
-                          value={selectedState}
-                          onChange={(e) => {
-                            const stateCode = e.target.value;
-                            setSelectedState(stateCode);
-                            const stateName = availableStates.find(s => s.isoCode === stateCode)?.name || stateCode;
-                            setValue('stateProvince', stateName);
+                  {/* Location Dropdowns - Lazy loaded for bundle optimization */}
+                  <LocationDropdowns
+                    ref={locationDropdownsRef}
+                    setValue={setValue}
+                    errors={errors}
+                    initialCountry="IN"
+                    watchedCountry={watchedValues.country}
+                    onGpsCoordinatesChange={handleGpsCoordinatesChange}
+                  />
 
-                            // Load cities for the new state (only if user manually changes)
-                            if (!isUpdatingFromMap && stateCode && selectedCountry) {
-                              const cities = City.getCitiesOfState(selectedCountry, stateCode);
-                              setAvailableCities(cities);
-                              setSelectedCity('');
-                              setValue('city', '');
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-                        >
-                          <option value="">Select State/Province</option>
-                          {/* Show selected state even if not in library */}
-                          {selectedState && !availableStates.find(s => s.isoCode === selectedState) && (
-                            <option value={selectedState}>
-                              {selectedState}
-                            </option>
-                          )}
-                          {availableStates.map((state) => (
-                            <option key={state.isoCode} value={state.isoCode}>
-                              {state.name}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedState && !availableStates.find(s => s.isoCode === selectedState) && (
-                          <p className="text-xs text-gray-500 mt-1">State auto-filled from map (you can change if needed)</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {/* Postal Code - kept separate from LocationDropdowns */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1185,53 +1021,6 @@ export default function CheckoutPage() {
                       )}
                       {watchedValues.country === 'IN' && !errors.postalCode && (
                         <p className="text-xs text-gray-500 mt-1">Mandatory field for users in India</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Country *
-                      </label>
-                      <select
-                        value={selectedCountry}
-                        onChange={(e) => {
-                          const countryCode = e.target.value;
-                          setSelectedCountry(countryCode);
-                          previousCountryRef.current = countryCode; // Track manual country change
-                          setValue('country', countryCode);
-
-                          // Load states for the new country
-                          if (countryCode) {
-                            const states = State.getStatesOfCountry(countryCode);
-                            setAvailableStates(states);
-                            setSelectedState('');
-                            setSelectedCity('');
-                            setValue('stateProvince', '');
-                            setValue('city', '');
-
-                            // For UAE, use Emirates as cities directly (UAE has no state/province level)
-                            if (countryCode === 'AE') {
-                              const emiratesAsCities = states.map(state => ({
-                                name: state.name.replace(' Emirate', ''),
-                                stateCode: state.isoCode,
-                                countryCode: state.countryCode
-                              }));
-                              setAvailableCities(emiratesAsCities as any);
-                            } else {
-                              setAvailableCities([]);
-                            }
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-                      >
-                        <option value="">Select Country</option>
-                        {Country.getAllCountries().map((country) => (
-                          <option key={country.isoCode} value={country.isoCode}>
-                            {country.name}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.country && (
-                        <p className="text-red-500 text-sm mt-1">{errors.country.message}</p>
                       )}
                     </div>
                   </div>
@@ -1258,113 +1047,6 @@ export default function CheckoutPage() {
                 )}
               </button>
             </form>
-          </div>
-
-          {/* Order Summary */}
-          <div className="lg:sticky lg:top-8 order-1 lg:order-2">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
-              
-              {/* Card Preview */}
-              <div className="mb-6">
-                <h4 className="font-medium mb-3">
-                  {cardConfig?.baseMaterial === 'digital' ? 'Digital Profile + Linkist App' : 'Your NFC Card'}
-                </h4>
-                <p className="text-sm text-gray-600 mb-2">
-                  {cardConfig?.fullName || 'Custom NFC Card'}
-                </p>
-                {cardConfig?.baseMaterial && cardConfig.baseMaterial !== 'digital' && (
-                  <p className="text-xs text-gray-500 mb-4">
-                    Material: {cardConfig.baseMaterial.charAt(0).toUpperCase() + cardConfig.baseMaterial.slice(1)} •
-                    Color: {(() => {
-                      const color = cardConfig.color || 'Black';
-                      // Remove material suffix (e.g., "black-pvc" -> "black")
-                      const colorName = color.split('-')[0];
-                      return colorName.charAt(0).toUpperCase() + colorName.slice(1);
-                    })()}
-                  </p>
-                )}
-                {cardConfig?.baseMaterial === 'digital' && (
-                  <p className="text-xs text-gray-500 mb-4">
-                    Includes: Linkist App Access (1 Year) • AI Credits • Analytics Dashboard
-                  </p>
-                )}
-
-                {/* Front Card */}
-                <div className="mb-4">
-                  <div className={`w-56 aspect-[1.6/1] bg-gradient-to-br ${getCardGradient()} rounded-xl relative overflow-hidden shadow-lg mr-auto`}>
-                    {/* AI Icon top right - No wrapper, no background, no shadow */}
-                    <img
-                      src={cardConfig?.color === 'white' ? '/ai2.png' : '/ai1.png'}
-                      alt="AI"
-                      className={`absolute top-3 right-3 w-4 h-4 ${cardConfig?.color === 'white' ? '' : 'invert'}`}
-                      style={{ boxShadow: 'none', background: 'transparent' }}
-                    />
-
-                    {/* User Name or Initials */}
-                    <div className="absolute bottom-4 left-4">
-                      {(() => {
-                        const firstName = cardConfig?.cardFirstName?.trim() || '';
-                        const lastName = cardConfig?.cardLastName?.trim() || '';
-                        const isSingleCharOnly = firstName.length <= 1 && lastName.length <= 1;
-
-                        if (isSingleCharOnly) {
-                          return (
-                            <div className={`${getTextColor()} text-xl font-light`}>
-                              {(firstName || 'J').toUpperCase()}{(lastName || 'D').toUpperCase()}
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <div className={`${getTextColor()} text-sm font-medium`}>
-                              {firstName} {lastName}
-                            </div>
-                          );
-                        }
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pricing Breakdown */}
-              <div className="space-y-3 text-sm">
-                {/* Material Price Only */}
-                <div className="flex justify-between">
-                  <span>
-                    Base Material x {quantity}
-                  </span>
-                  <span>${(pricing.materialPrice * quantity).toFixed(2)}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span>Customization</span>
-                  <span className="text-green-600">Included</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Shipping</span>
-                  <span className="text-green-600">Included</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>{pricing.taxLabel || 'VAT (5%)'}</span>
-                  <span>${pricing.taxAmount.toFixed(2)}</span>
-                </div>
-
-                <div className="border-t pt-3 flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span>${pricing.total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Security Notice */}
-              <div className="mt-6 flex items-start space-x-3 text-sm text-gray-600">
-                <Shield className="h-5 w-5 mt-0.5" />
-                <div>
-                  <p className="font-medium">Secure Payment</p>
-                  <p>Your payment info is encrypted and secure</p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

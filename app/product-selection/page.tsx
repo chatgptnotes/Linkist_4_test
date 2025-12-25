@@ -16,6 +16,7 @@ import Footer from '@/components/Footer';
 import RequestAccessModal from '@/components/RequestAccessModal';
 import EnterCodeModal from '@/components/EnterCodeModal';
 import SignupOverlay from '@/components/SignupOverlay';
+import { getTaxRate } from '@/lib/country-utils';
 import Link from 'next/link';
 import LoginIcon from '@mui/icons-material/Login';
 
@@ -113,7 +114,10 @@ export default function ProductSelectionPage() {
 
       if (data.success && data.plans) {
         // Map database plans to ProductOption format
-        const mappedPlans = data.plans.map((plan: any) => {
+        // Filter out founders-club plans (they have a separate "Exclusive Access" card)
+        const mappedPlans = data.plans
+          .filter((plan: any) => plan.type !== 'founders-club')
+          .map((plan: any) => {
           const isPhysicalCardAllowed = plan.allowed_countries?.includes(userCountry) ?? true;
 
           // Determine icon based on plan type
@@ -271,7 +275,7 @@ export default function ProductSelectionPage() {
       let firstName = 'User';
       let lastName = 'Name';
       let phoneNumber = '';
-      let country = 'US';
+      let country = 'IN';
 
       if (userProfile) {
         try {
@@ -280,7 +284,7 @@ export default function ProductSelectionPage() {
           firstName = profile.firstName || 'User';
           lastName = profile.lastName || 'Name';
           phoneNumber = profile.mobile || '';
-          country = profile.country || 'US';
+          country = profile.country || 'IN';
         } catch (error) {
           console.error('Error parsing user profile:', error);
         }
@@ -387,7 +391,7 @@ export default function ProductSelectionPage() {
         let firstName = 'User';
         let lastName = 'Name';
         let phoneNumber = '';
-        let country = 'US';
+        let country = 'IN';
 
         if (userProfile) {
           try {
@@ -396,7 +400,7 @@ export default function ProductSelectionPage() {
             firstName = profile.firstName || 'User';
             lastName = profile.lastName || 'Name';
             phoneNumber = profile.mobile || '';
-            country = profile.country || 'US';
+            country = profile.country || 'IN';
           } catch (error) {
             console.error('Error parsing user profile:', error);
           }
@@ -406,7 +410,8 @@ export default function ProductSelectionPage() {
         const digitalProfilePrice = 59;
         const subscriptionPrice = 120;
         const taxableAmount = digitalProfilePrice; // Only tax on digital profile
-        const taxAmount = country === 'IN' ? taxableAmount * 0.18 : taxableAmount * 0.05;
+        const taxInfo = getTaxRate(country);
+        const taxAmount = taxableAmount * taxInfo.rate;
         const totalAmount = digitalProfilePrice + subscriptionPrice + taxAmount;
 
         const digitalOrder = {

@@ -44,20 +44,6 @@ export default function HeroSection() {
               className="w-full h-auto drop-shadow-2xl"
             />
 
-            {/* Floating Badge - AI Powered */}
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute -top-10 -right-4 md:right-10 bg-[#1C1C22]/80 backdrop-blur-md border border-[#333] p-4 rounded-2xl flex items-center gap-3 shadow-2xl"
-            >
-              <div className="w-10 h-10 rounded-full bg-[#E02424]/20 flex items-center justify-center">
-                <span className="text-xl">✨</span>
-              </div>
-              <div>
-                <div className="text-white font-bold text-sm">AI-Powered</div>
-                <div className="text-xs text-[#888]">Context Recall</div>
-              </div>
-            </motion.div>
           </div>
 
           {/* Background Glow */}

@@ -7,6 +7,7 @@ import { formatOrderForEmail } from '@/lib/order-store';
 import { emailService } from '@/lib/email-service';
 import { createClient } from '@/lib/supabase/client';
 import { calculatePricing } from '@/lib/pricing-utils';
+import { getCurrency } from '@/lib/country-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -119,17 +120,34 @@ export async function POST(request: NextRequest) {
         updateData.voucherCode = paymentData.voucherCode || null;
         updateData.voucherDiscount = paymentData.voucherDiscount || 0;
 
-        // FIXED: Update pricing.total to reflect the final amount paid (after voucher discount)
-        if (paymentData.voucherAmount && paymentData.voucherAmount > 0) {
-          const originalTotal = existingOrder.pricing?.total || 0;
-          const finalTotal = Math.max(0, originalTotal - paymentData.voucherAmount);
-
+        // FIXED: Always use pricing from request if provided (contains actual paid amount)
+        // This ensures DB stores the exact amount the user paid, regardless of founders status or vouchers
+        if (pricing && pricing.total !== undefined) {
           updateData.pricing = {
             ...existingOrder.pricing,
-            totalBeforeDiscount: originalTotal, // Save original total for reference
-            total: finalTotal, // Update to actual amount paid
-            voucherAmount: paymentData.voucherAmount, // Save voucher discount amount
+            ...pricing, // Use pricing from request (includes actual paid total)
           };
+        } else {
+          // Fallback to old logic if pricing not provided in request
+          const isFoundersOrder = (existingOrder?.cardConfig as any)?.isFoundingMember ||
+                                  (cardConfig as any)?.isFoundingMember;
+
+          if (paymentData.voucherAmount && paymentData.voucherAmount > 0 && !isFoundersOrder) {
+            const originalTotal = existingOrder.pricing?.total || 0;
+            const finalTotal = Math.max(0, originalTotal - paymentData.voucherAmount);
+
+            updateData.pricing = {
+              ...existingOrder.pricing,
+              totalBeforeDiscount: originalTotal,
+              total: finalTotal,
+              voucherAmount: paymentData.voucherAmount,
+            };
+          } else if (paymentData.voucherAmount && paymentData.voucherAmount > 0 && isFoundersOrder) {
+            updateData.pricing = {
+              ...existingOrder.pricing,
+              voucherCode: paymentData.voucherCode,
+            };
+          }
         }
       }
 
@@ -201,14 +219,16 @@ export async function POST(request: NextRequest) {
     // Create payment record if payment data provided
     if (paymentData && order) {
       try {
-        // Calculate amount in cents (totalAmount is already calculated above)
-        const amount = Math.round(totalAmount * 100);
+        // FIXED: Use pricing.total from request if available (actual paid amount)
+        // This ensures the payment record matches what the user actually paid
+        const actualTotal = pricing?.total ?? totalAmount;
+        const amount = Math.round(actualTotal * 100);
 
         const payment = await SupabasePaymentStore.create({
           orderId: order.id,
           paymentIntentId: paymentData.paymentId || `payment_${Date.now()}`,
           amount: amount,
-          currency: checkoutData.country === 'IN' || checkoutData.country === 'India' ? 'INR' : 'USD',
+          currency: getCurrency(checkoutData.country),
           status: 'succeeded',
           paymentMethod: paymentData.paymentMethod || 'unknown',
           metadata: {

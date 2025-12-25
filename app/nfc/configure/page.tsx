@@ -12,6 +12,8 @@ import InfoIcon from '@mui/icons-material/Info';
 import StarsIcon from '@mui/icons-material/Stars';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
+import { calculateFoundersPricing, FoundersPricingBreakdown } from '@/lib/pricing-utils';
+import { getTaxRate, detectCountryFromIP, isIndia } from '@/lib/country-utils';
 
 // Lazy load CompanyLogoUpload for performance
 const CompanyLogoUpload = dynamic(() => import('@/components/CompanyLogoUpload'), {
@@ -71,6 +73,7 @@ export default function ConfigureNewPage() {
     pattern: null
   });
   const [userCountry, setUserCountry] = useState<string>('India');
+  const [isCountryDetected, setIsCountryDetected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFoundingMember, setIsFoundingMember] = useState(false);
 
@@ -79,6 +82,8 @@ export default function ConfigureNewPage() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [foundersTotalPrice, setFoundersTotalPrice] = useState<number | null>(null);
+  const [foundersPricing, setFoundersPricing] = useState<FoundersPricingBreakdown | null>(null);
 
   // Product Plan Price (Physical Card + Digital Profile)
   const PRODUCT_PLAN_PRICE = 69;
@@ -90,8 +95,71 @@ export default function ConfigureNewPage() {
     localStorage.removeItem('cardConfig');
     console.log('Configure: Cleared old localStorage data');
 
+    // Step 1: Detect country from IP first (single source of truth)
+    const initializeCountryAndData = async () => {
+      let detectedCountry = 'India'; // Default fallback
+
+      try {
+        // Try to get country from IP detection
+        const ipData = await detectCountryFromIP();
+        detectedCountry = ipData.countryName;
+        console.log('Configure: Country detected from IP:', detectedCountry);
+      } catch (error) {
+        console.log('Configure: IP detection failed, checking localStorage');
+        // Fallback to localStorage if IP detection fails
+        const userProfile = localStorage.getItem('userProfile');
+        if (userProfile) {
+          try {
+            const profile = JSON.parse(userProfile);
+            detectedCountry = profile.country || 'India';
+          } catch (e) {
+            console.error('Error parsing user profile:', e);
+          }
+        }
+      }
+
+      // Set the detected country
+      setUserCountry(detectedCountry);
+      setIsCountryDetected(true);
+      console.log('Configure: Using country:', detectedCountry);
+
+      // Update localStorage with detected country for consistency
+      const existingProfile = localStorage.getItem('userProfile');
+      if (existingProfile) {
+        try {
+          const profile = JSON.parse(existingProfile);
+          profile.country = detectedCountry;
+          localStorage.setItem('userProfile', JSON.stringify(profile));
+        } catch (e) {
+          console.error('Error updating profile:', e);
+        }
+      }
+
+      // Step 2: Check founding member status and fetch pricing with detected country
+      await checkFoundingMemberStatus(detectedCountry);
+
+      // Step 3: Pre-fill card names from userProfile
+      const userProfile = localStorage.getItem('userProfile');
+      if (userProfile) {
+        try {
+          const profile = JSON.parse(userProfile);
+          setFormData(prev => ({
+            ...prev,
+            cardFirstName: profile.firstName || '',
+            cardLastName: profile.lastName || ''
+          }));
+          console.log('Configure: Pre-filled card name from profile:', {
+            cardFirstName: profile.firstName,
+            cardLastName: profile.lastName
+          });
+        } catch (error) {
+          console.error('Error parsing user profile:', error);
+        }
+      }
+    };
+
     // Check founding member status from API
-    const checkFoundingMemberStatus = async () => {
+    const checkFoundingMemberStatus = async (country: string) => {
       try {
         const response = await fetch('/api/auth/me', {
           credentials: 'include',
@@ -112,6 +180,9 @@ export default function ConfigureNewPage() {
               colour: 'black-metal'
             }));
             console.log('Configure: Pre-selected Metal card for founding member');
+
+            // Fetch founders pricing with the detected country
+            await fetchFoundersPricing(country);
           }
         }
       } catch (error) {
@@ -119,32 +190,35 @@ export default function ConfigureNewPage() {
       }
     };
 
-    checkFoundingMemberStatus();
-
-    // Get user profile data from localStorage (from welcome page)
-    const userProfile = localStorage.getItem('userProfile');
-    if (userProfile) {
+    // Fetch founders pricing from API with specific country
+    const fetchFoundersPricing = async (country: string) => {
       try {
-        const profile = JSON.parse(userProfile);
-        setUserCountry(profile.country || 'India');
-
-        // Pre-fill card names from userProfile if available (user can customize)
-        setFormData(prev => ({
-          ...prev,
-          cardFirstName: profile.firstName || '',
-          cardLastName: profile.lastName || ''
-        }));
-
-        console.log('Configure: Pre-filled card name from profile:', {
-          cardFirstName: profile.firstName,
-          cardLastName: profile.lastName,
-          country: profile.country
-        });
+        const response = await fetch(`/api/founders/pricing?country=${encodeURIComponent(country)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.founders_total_price) {
+            setFoundersTotalPrice(data.founders_total_price);
+            setFoundersPricing(data.pricing);
+            console.log('Configure: Founders pricing loaded for country:', country, data.pricing);
+          }
+        }
       } catch (error) {
-        console.error('Error parsing user profile:', error);
+        console.log('Configure: Could not fetch founders pricing');
       }
-    }
+    };
+
+    // Start initialization
+    initializeCountryAndData();
   }, []);
+
+  // Recalculate founders pricing when country changes
+  useEffect(() => {
+    if (isFoundingMember && foundersTotalPrice) {
+      const pricing = calculateFoundersPricing(foundersTotalPrice, userCountry);
+      setFoundersPricing(pricing);
+      console.log('Configure: Recalculated founders pricing for country:', userCountry, pricing);
+    }
+  }, [userCountry, isFoundingMember, foundersTotalPrice]);
 
   // Admin-configured prices (these would come from admin panel)
   const prices: Record<BaseMaterial, number> = {
@@ -310,17 +384,10 @@ export default function ConfigureNewPage() {
     // FIXED: Tax should only be calculated on material price, NOT subscription
     const basePrice = materialPrice;
 
-    // Region-based tax rates
-    let taxRate = 0.10; // Default 10%
-    let taxLabel = 'VAT (10%)';
-
-    if (userCountry === 'India') {
-      taxRate = 0.18;
-      taxLabel = 'GST (18%)';
-    } else if (userCountry === 'UAE') {
-      taxRate = 0.05;
-      taxLabel = 'VAT (5%)';
-    }
+    // Use centralized tax rate lookup (India 18% GST, Others 5% VAT)
+    const taxInfo = getTaxRate(userCountry);
+    const taxRate = taxInfo.rate;
+    const taxLabel = taxInfo.label;
 
     // FIXED: Tax calculated ONLY on material price (base price)
     const taxAmount = basePrice * taxRate;
@@ -394,7 +461,10 @@ export default function ConfigureNewPage() {
       // Founding member exclusive options
       showLinkistLogo: isFoundingMember ? showLinkistLogo : true,
       companyLogoUrl: isFoundingMember ? companyLogoUrl : null,
-      isFoundingMember: isFoundingMember
+      isFoundingMember: isFoundingMember,
+      // Founders pricing (for checkout/payment)
+      foundersTotalPrice: isFoundingMember ? foundersTotalPrice : null,
+      foundersPricing: isFoundingMember ? foundersPricing : null
     };
 
     console.log('Configure: Saving card data to localStorage:', configData);
@@ -687,27 +757,54 @@ export default function ConfigureNewPage() {
               </div>
               <div className="p-3">
                 {isFoundingMember ? (
-                  // Founders see simplified summary - no prices
+                  // Founders see price breakdown with back-calculated base price
                   <div className="space-y-1.5 text-sm">
+                    {/* Base Material Price (back-calculated from total) */}
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-700">Premium Card</span>
-                      <span className="text-green-600 font-medium">Included in Membership</span>
+                      <span className="text-gray-700">Base Material</span>
+                      <span className="font-semibold text-gray-900">
+                        {foundersPricing ? formatCurrency(foundersPricing.basePrice) : '—'}
+                      </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-700">Customization</span>
-                      <span className="text-green-600 font-medium">Included</span>
-                    </div>
+
+                    {/* Shipping - Included */}
                     <div className="flex justify-between items-center">
                       <span className="text-gray-700">Shipping</span>
                       <span className="text-green-600 font-medium">Included</span>
                     </div>
+
+                    {/* Customization - Included */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Customization</span>
+                      <span className="text-green-600 font-medium">Included</span>
+                    </div>
+
+                    {/* Tax (GST/VAT) */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">
+                        {foundersPricing ? foundersPricing.taxLabel : getTaxRate(userCountry).label}
+                      </span>
+                      <span className="font-semibold text-gray-900">
+                        {foundersPricing ? formatCurrency(foundersPricing.taxAmount) : '—'}
+                      </span>
+                    </div>
+
+                    {/* Total */}
                     <div className="border-t pt-2 mt-2">
-                      <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-amber-700 flex items-center">
-                          <Crown className="mr-1 w-4 h-4" />
-                          Founders Club members enjoy complimentary premium cards
-                        </p>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-900">Total</span>
+                        <span className="text-xl font-bold text-red-500">
+                          {foundersPricing ? formatCurrency(foundersPricing.total) : '—'}
+                        </span>
                       </div>
+                    </div>
+
+                    {/* Founders Club Badge */}
+                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-xs text-amber-700 flex items-center">
+                        <Crown className="mr-1 w-4 h-4" />
+                        Founders Club exclusive pricing
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -743,7 +840,7 @@ export default function ConfigureNewPage() {
                         {/* Tax */}
                         <div className="flex justify-between items-center">
                           <span className="text-gray-700">
-                            {priceSummary ? priceSummary.taxLabel : 'VAT (5%)'}
+                            {priceSummary ? priceSummary.taxLabel : getTaxRate(userCountry).label}
                           </span>
                           <span className="font-semibold text-gray-900">
                             {priceSummary ? formatCurrency(priceSummary.taxAmount) : '—'}
@@ -764,11 +861,9 @@ export default function ConfigureNewPage() {
                         <div className="mt-2 p-1.5 bg-blue-50 border border-blue-200 rounded-lg">
                           <p className="text-xs text-blue-700 flex items-center">
                             <Info className="mr-1 w-4 h-4" />
-                            {userCountry === 'India'
+                            {isIndia(userCountry)
                               ? 'GST (18%) will apply for deliveries to India'
-                              : userCountry === 'UAE'
-                              ? 'VAT (5%) will apply for deliveries to UAE'
-                              : `VAT (10%) will apply for international deliveries`
+                              : 'VAT (5%) will apply for international deliveries'
                             }
                           </p>
                         </div>

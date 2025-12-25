@@ -8,6 +8,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import Footer from '@/components/Footer';
+import { getTaxRate } from '@/lib/country-utils';
 
 // Icon aliases
 const ChevronDown = ExpandMoreIcon;
@@ -69,7 +70,8 @@ export default function ConfirmPaymentPage() {
   };
 
   const calculateTax = () => {
-    return 1.50; // VAT 5%
+    const taxInfo = getTaxRate(paymentData.country);
+    return calculateSubtotal() * taxInfo.rate;
   };
 
   const calculateTotal = () => {

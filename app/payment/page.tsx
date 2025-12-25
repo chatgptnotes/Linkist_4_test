@@ -9,6 +9,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import SecurityIcon from '@mui/icons-material/Security';
 import CheckIcon from '@mui/icons-material/Check';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import { getTaxRate } from '@/lib/country-utils';
 
 // Icon aliases
 const CreditCard = CreditCardIcon;
@@ -101,10 +102,11 @@ export default function PaymentPage() {
         price: productPrice
       });
 
-      // Calculate order summary based on country
+      // Calculate order summary based on country (using centralized tax rates)
       const subtotal = productPrice;
       const shipping = productSelection === 'physical-digital' ? (userCountry === 'India' ? 0 : 5.00) : 0;
-      const vatRate = userCountry === 'UAE' ? 0.05 : userCountry === 'India' ? 0.18 : 0.10;
+      const taxInfo = getTaxRate(userCountry);
+      const vatRate = taxInfo.rate;
       const vat = (subtotal + shipping) * vatRate;
 
       setOrderSummary({

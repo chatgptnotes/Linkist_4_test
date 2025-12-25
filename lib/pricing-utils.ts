@@ -4,6 +4,8 @@
  * Used by checkout and payment pages to ensure consistency
  */
 
+import { getTaxRate, normalizeCountryCode, isIndia } from './country-utils';
+
 export interface CardConfig {
   baseMaterial?: 'pvc' | 'metal' | 'wood' | 'digital';
   quantity?: number;
@@ -39,18 +41,9 @@ export const materialPrices: Record<string, number> = {
 // App subscription price (USD)
 export const APP_SUBSCRIPTION_PRICE = 120;
 
-// Tax rates by country
-export const TAX_RATES: Record<string, number> = {
-  IN: 0.18, // India - 18% GST
-  US: 0.08, // USA - varies by state, using average
-  CA: 0.13, // Canada - varies by province
-  GB: 0.20, // UK - 20% VAT
-  AU: 0.10, // Australia - 10% GST
-  // Add more countries as needed
-};
-
-// Default tax rate for unlisted countries
-export const DEFAULT_TAX_RATE = 0.05;
+// Tax rates - SIMPLIFIED: India 18% GST, All others 5% VAT
+// Uses country-utils for consistent rate lookup
+export { INDIA_TAX_RATE, DEFAULT_TAX_RATE } from './country-utils';
 
 // Shipping cost (flat rate for now)
 export const SHIPPING_COST = 0; // Free shipping
@@ -87,8 +80,10 @@ export function calculatePricing(options: CalculatePricingOptions): PricingBreak
     appSubscriptionPrice = APP_SUBSCRIPTION_PRICE;
   }
 
-  // Get tax rate for country
-  const taxRate = TAX_RATES[country] || DEFAULT_TAX_RATE;
+  // Get tax rate for country (uses centralized country-utils)
+  const normalizedCountry = normalizeCountryCode(country);
+  const taxInfo = getTaxRate(normalizedCountry);
+  const taxRate = taxInfo.rate;
 
   // FIXED: Calculate tax ONLY on material price (base price), NOT on subscription
   // Tax should only apply to the physical product, not the digital subscription
@@ -158,6 +153,42 @@ export function validatePricingData(pricing: any): boolean {
  */
 export function formatPrice(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+/**
+ * Founders Club Pricing Calculation
+ * Admin sets a TOTAL price, system back-calculates base price by region
+ * - India: 18% GST (e.g., $100 total → $82 base + $18 GST)
+ * - US/UK/UAE/Others: 5% VAT (e.g., $100 total → $95 base + $5 VAT)
+ */
+export interface FoundersPricingBreakdown {
+  basePrice: number;
+  taxRate: number;
+  taxAmount: number;
+  taxLabel: string;
+  total: number;
+}
+
+export function calculateFoundersPricing(
+  totalPrice: number,
+  country: string
+): FoundersPricingBreakdown {
+  // Use centralized tax rate lookup (India 18% GST, Others 5% VAT)
+  const taxInfo = getTaxRate(country);
+  const taxRate = taxInfo.rate;
+  const taxLabel = taxInfo.label;
+
+  // Back-calculate: taxAmount = total * taxRate, basePrice = total - taxAmount
+  const taxAmount = totalPrice * taxRate;
+  const basePrice = totalPrice - taxAmount;
+
+  return {
+    basePrice: Math.round(basePrice * 100) / 100,
+    taxRate,
+    taxAmount: Math.round(taxAmount * 100) / 100,
+    taxLabel,
+    total: totalPrice
+  };
 }
 
 /**

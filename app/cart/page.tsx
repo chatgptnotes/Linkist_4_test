@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CartCardPreview from '@/components/CartCardPreview';
+import { getTaxRate } from '@/lib/country-utils';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -21,6 +22,7 @@ const CheckCircle = CheckCircleIcon;
 
 export default function CartPage() {
   const router = useRouter();
+  const [userCountry, setUserCountry] = useState<string>('India');
   const [cartItems, setCartItems] = useState<{
     id: number;
     name: string;
@@ -48,6 +50,17 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Load user country from localStorage
+    const userProfile = localStorage.getItem('userProfile');
+    if (userProfile) {
+      try {
+        const profile = JSON.parse(userProfile);
+        setUserCountry(profile.country || 'India');
+      } catch (error) {
+        console.error('Error parsing user profile:', error);
+      }
+    }
+
     // Load cart data from localStorage
     const savedConfig = localStorage.getItem('cardConfig');
     if (savedConfig) {
@@ -95,7 +108,8 @@ export default function CartPage() {
   };
 
   const calculateTax = () => {
-    return calculateSubtotal() * 0.05; // 5% VAT
+    const taxInfo = getTaxRate(userCountry);
+    return calculateSubtotal() * taxInfo.rate;
   };
 
   const calculateTotal = () => {

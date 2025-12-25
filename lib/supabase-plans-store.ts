@@ -26,6 +26,7 @@ export interface SubscriptionPlan {
   popular: boolean;
   allowed_countries: string[];
   display_order: number;
+  founders_total_price: number | null; // Total price for Founders Club (system back-calculates base by region)
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +43,7 @@ export interface CreatePlanData {
   popular?: boolean;
   allowed_countries?: string[];
   display_order?: number;
+  founders_total_price?: number | null;
 }
 
 export interface UpdatePlanData extends Partial<CreatePlanData> {}
@@ -133,6 +135,7 @@ export const SupabasePlansStore = {
       popular: planData.popular || false,
       allowed_countries: planData.allowed_countries || ['India', 'UAE', 'USA', 'UK'],
       display_order: displayOrder,
+      founders_total_price: planData.founders_total_price || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

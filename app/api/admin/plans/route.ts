@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, type, price, gst_percentage, vat_percentage, description, features, status, popular, allowed_countries } = body;
+    const { name, type, price, gst_percentage, vat_percentage, description, features, status, popular, allowed_countries, founders_total_price } = body;
 
     // Validation
     if (!name || !type || price === undefined || price === null || !description || !features) {
@@ -85,7 +85,8 @@ export async function POST(request: NextRequest) {
       features,
       status: status || 'draft',
       popular: popular || false,
-      allowed_countries: allowed_countries || ['India', 'UAE', 'USA', 'UK']
+      allowed_countries: allowed_countries || ['India', 'UAE', 'USA', 'UK'],
+      founders_total_price: type === 'founders-club' ? founders_total_price : null
     });
 
     return NextResponse.json({

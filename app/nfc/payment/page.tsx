@@ -167,7 +167,7 @@ export default function NFCPaymentPage() {
 
         try {
           // FIXED: Use unified pricing utility for consistent order amount calculation
-          const country = data.shipping?.country || 'US';
+          const country = data.shipping?.country || 'IN';
           const orderAmount = getOrderAmountForVoucher({
             cardConfig: {
               baseMaterial: data.cardConfig?.baseMaterial || 'pvc',
@@ -315,7 +315,7 @@ export default function NFCPaymentPage() {
     setApplyingVoucher(true);
     try {
       // FIXED: Use unified pricing utility for consistent order amount
-      const country = orderData?.shipping?.country || 'US';
+      const country = orderData?.shipping?.country || 'IN';
       const orderAmount = getOrderAmountForVoucher({
         cardConfig: {
           baseMaterial: orderData?.cardConfig?.baseMaterial || 'pvc',
@@ -612,6 +612,13 @@ export default function NFCPaymentPage() {
                 voucherCode: voucherCode || null,
                 voucherDiscount: voucherDiscount || 0,
                 voucherAmount: voucherAmount || 0,
+              },
+              // FIXED: Send actual paid amount to ensure DB stores correct total
+              pricing: {
+                ...orderData.pricing,
+                total: getFinalAmount(), // Actual amount paid
+                totalBeforeDiscount: getSubtotal(),
+                voucherAmount: voucherAmount || 0,
               }
             })
           });
@@ -699,6 +706,13 @@ export default function NFCPaymentPage() {
             paymentId: paymentIntentId,
             voucherCode: appliedVoucherCode || voucherCode || null,
             voucherDiscount: voucherDiscount || 0,
+            voucherAmount: voucherAmount || 0,
+          },
+          // FIXED: Send actual paid amount to ensure DB stores correct total
+          pricing: {
+            ...orderData.pricing,
+            total: getFinalAmount(), // Actual amount charged by Stripe
+            totalBeforeDiscount: getSubtotal(),
             voucherAmount: voucherAmount || 0,
           }
         })
