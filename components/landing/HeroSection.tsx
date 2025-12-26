@@ -9,12 +9,12 @@ export default function HeroSection() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-[#E02424]/10 blur-[150px] rounded-full mix-blend-screen" />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 text-center mt-20">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 text-center pt-16 md:pt-20">
         <motion.h1
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-5xl md:text-7xl font-bold tracking-tight mb-8 text-[#E1E1E1]"
+          className="text-3xl sm:text-4xl md:text-7xl font-bold tracking-tight mb-6 md:mb-8 text-[#E1E1E1]"
         >
           The Worlds First <br />
           <span className="text-[#A0A0A0]">Personal Relationship</span> <br />
@@ -25,7 +25,7 @@ export default function HeroSection() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4, duration: 0.8 }}
-          className="text-lg md:text-xl text-[#888888] max-w-2xl mx-auto mb-12"
+          className="text-base sm:text-lg md:text-xl text-[#888888] max-w-2xl mx-auto mb-8 md:mb-12 px-2"
         >
           Linkist gives you the tools to strategically track, nurture, and leverage every key relationship.
         </motion.p>
@@ -35,7 +35,7 @@ export default function HeroSection() {
           initial={{ opacity: 0, scale: 0.9, y: 30 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ delay: 0.6, duration: 0.8 }}
-          className="relative mx-auto w-full max-w-4xl mt-12"
+          className="relative mx-auto w-full max-w-4xl mt-8 md:mt-12 px-4 sm:px-0"
         >
           <div className="relative z-10">
             <img

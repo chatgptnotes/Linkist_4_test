@@ -4,27 +4,18 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { loadStripe } from '@stripe/stripe-js';
-import QRCode from 'qrcode';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
 import LockIcon from '@mui/icons-material/Lock';
 import SecurityIcon from '@mui/icons-material/Security';
 import CheckIcon from '@mui/icons-material/Check';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import SmartphoneIcon from '@mui/icons-material/Smartphone';
-import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Footer from '@/components/Footer';
 import { getOrderAmountForVoucher } from '@/lib/pricing-utils';
 import StripePaymentModal from '@/components/StripePaymentModal';
 
 // Icon aliases
-const CreditCard = CreditCardIcon;
 const Lock = LockIcon;
 const Shield = SecurityIcon;
 const Check = CheckIcon;
-const ChevronLeft = ChevronLeftIcon;
-const Smartphone = SmartphoneIcon;
-const Ticket = ConfirmationNumberIcon;
 const AlertCircle = ErrorOutlineIcon;
 
 // Initialize Stripe (you'll need to add your publishable key)
@@ -60,21 +51,9 @@ export default function NFCPaymentPage() {
   const router = useRouter();
 
   // Payment state
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'upi'>('card');
   const [processing, setProcessing] = useState(false);
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [hasOrderError, setHasOrderError] = useState(false);
-
-  // Card details
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [cvv, setCvv] = useState('');
-
-  // UPI details
-  const [upiId, setUpiId] = useState('');
-  const [showUpiQR, setShowUpiQR] = useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = useState('');
 
   // Voucher details
   const [voucherCode, setVoucherCode] = useState('');
@@ -115,7 +94,6 @@ export default function NFCPaymentPage() {
       }
 
       setOrderData(data);
-      setCardHolder(''); // Keep cardholder name blank
       setHasOrderError(false);
 
       // Store original total before any discounts
@@ -223,81 +201,6 @@ export default function NFCPaymentPage() {
   // NOTE: Founding member check and voucher auto-apply are now handled
   // together in the initialization useEffect above to prevent race conditions
 
-  // Generate QR code when UPI QR is shown
-  useEffect(() => {
-    const generateQRCode = async () => {
-      if (showUpiQR && orderData) {
-        try {
-          const amount = getFinalAmount();
-          // Create UPI payment string
-          const upiString = `upi://pay?pa=linkist@paytm&pn=Linkist%20NFC&am=${amount.toFixed(2)}&cu=USD&tn=NFC%20Card%20Payment`;
-
-          // Generate QR code as data URL
-          const qrDataUrl = await QRCode.toDataURL(upiString, {
-            width: 200,
-            margin: 2,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          });
-
-          setQrCodeUrl(qrDataUrl);
-        } catch (error) {
-          console.error('Error generating QR code:', error);
-        }
-      }
-    };
-
-    generateQRCode();
-  }, [showUpiQR, orderData, voucherDiscount]);
-
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = (matches && matches[0]) || '';
-    const parts = [];
-
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return value;
-    }
-  };
-
-  const formatExpiryDate = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return v.slice(0, 2) + (v.length > 2 ? '/' + v.slice(2, 4) : '');
-    }
-    return v;
-  };
-
-  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatCardNumber(e.target.value);
-    if (formatted.replace(/\s/g, '').length <= 16) {
-      setCardNumber(formatted);
-    }
-  };
-
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatExpiryDate(e.target.value);
-    if (formatted.replace('/', '').length <= 4) {
-      setExpiryDate(formatted);
-    }
-  };
-
-  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '');
-    if (value.length <= 4) {
-      setCvv(value);
-    }
-  };
-
   const validateVoucher = async () => {
     if (!voucherCode.trim()) {
       alert('Please enter a voucher code');
@@ -367,16 +270,6 @@ export default function NFCPaymentPage() {
     } finally {
       setApplyingVoucher(false);
     }
-  };
-
-  const generateUPIQR = () => {
-    if (!orderData) return '';
-
-    // Generate UPI payment string
-    const upiString = `upi://pay?pa=linkist@paytm&pn=Linkist%20NFC&am=${getFinalAmount()}&cu=INR&tn=NFC%20Card%20Purchase`;
-
-    // In production, this would generate an actual QR code
-    return upiString;
   };
 
   // Helper functions for card preview
@@ -495,35 +388,15 @@ export default function NFCPaymentPage() {
     }
   };
 
-  const handleUPIPayment = async () => {
-    // Generate UPI intent for mobile devices
-    if (/Android|iPhone/i.test(navigator.userAgent)) {
-      const upiIntent = generateUPIQR();
-      window.location.href = upiIntent;
-
-      // Show QR code for desktop users to scan
-    } else {
-      setShowUpiQR(true);
-    }
-
-    // In production, you'd poll for payment confirmation
-    // For now, simulate success after user action
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true, paymentId: 'upi_' + Date.now() });
-      }, 3000);
-    });
-  };
-
   const handlePayment = async () => {
     if (!orderData) {
-      console.error('❌ No order data found');
+      console.error('No order data found');
       return;
     }
 
     // Validate that order exists before processing payment
     if (!orderData.orderId) {
-      console.error('❌ No orderId found in order data');
+      console.error('No orderId found in order data');
       alert('No order found. Please complete checkout first.');
       router.push('/nfc/checkout');
       return;
@@ -532,121 +405,19 @@ export default function NFCPaymentPage() {
     setProcessing(true);
 
     try {
-      let paymentResult;
+      const paymentResult = await handleStripePayment();
 
-      switch (paymentMethod) {
-        case 'card':
-
-          paymentResult = await handleStripePayment();
-
-          // If modal opened, stop here and wait for modal callback
-          if (paymentResult && paymentResult.modalOpened) {
-
-            setProcessing(false);
-            return;
-          }
-          break;
-
-        case 'upi':
-          if (!upiId) {
-            alert('Please enter your UPI ID');
-            setProcessing(false);
-            return;
-          }
-
-          paymentResult = await handleUPIPayment();
-          break;
-
-        default:
-          throw new Error('Invalid payment method');
+      // If modal opened, stop here and wait for modal callback
+      if (paymentResult && paymentResult.modalOpened) {
+        setProcessing(false);
+        return;
       }
 
-      if (paymentResult && paymentResult.success) {
-
-        // Store payment confirmation with complete pricing data
-        const orderConfirmation = {
-          ...orderData,
-          paymentMethod,
-          paymentId: paymentResult.paymentId,
-          amount: getFinalAmount(),
-          pricing: {
-            ...orderData.pricing,
-            // Explicitly store all pricing fields for success page
-            materialPrice: orderData.pricing?.materialPrice || 99,
-            appSubscriptionPrice: orderData.pricing?.appSubscriptionPrice || 120,
-            taxAmount: orderData.pricing?.taxAmount || 0,
-            subtotal: getSubtotal(),
-            total: getFinalAmount()
-          },
-          voucherCode: voucherCode || null,
-          voucherDiscount: voucherDiscount || 0,
-          voucherAmount: voucherAmount || 0,
-          timestamp: new Date().toISOString()
-        };
-
-        localStorage.setItem('orderConfirmation', JSON.stringify(orderConfirmation));
-
-        // Update existing order with payment details using process-order API
-        try {
-
-          const response = await fetch('/api/process-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              orderId: orderData.orderId,
-              cardConfig: orderData.cardConfig,
-              checkoutData: {
-                email: orderData.email,
-                fullName: orderData.customerName,
-                phoneNumber: orderData.phoneNumber,
-                addressLine1: orderData.shipping.addressLine1,
-                addressLine2: orderData.shipping.addressLine2,
-                city: orderData.shipping.city,
-                state: orderData.shipping.stateProvince,
-                country: orderData.shipping.country,
-                postalCode: orderData.shipping.postalCode,
-              },
-              paymentData: {
-                paymentMethod,
-                paymentId: paymentResult.paymentId,
-                voucherCode: voucherCode || null,
-                voucherDiscount: voucherDiscount || 0,
-                voucherAmount: voucherAmount || 0,
-              },
-              // FIXED: Send actual paid amount to ensure DB stores correct total
-              pricing: {
-                ...orderData.pricing,
-                total: getFinalAmount(), // Actual amount paid
-                totalBeforeDiscount: getSubtotal(),
-                voucherAmount: voucherAmount || 0,
-              }
-            })
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Response error:', errorText);
-            throw new Error(`Failed to process order: ${response.status}`);
-          }
-
-          const result = await response.json();
-
-        } catch (error) {
-          console.error('❌ Error processing order:', error);
-          // Continue to success page even if there's an error
-          // The order might still be in database, and user has already paid
-        }
-
-        // Small delay to ensure everything is saved
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Redirect to success page
-        router.push('/nfc/success');
-      } else {
+      if (paymentResult && !paymentResult.modalOpened) {
         throw new Error('Payment was not successful');
       }
     } catch (error) {
-      console.error('❌ Payment error:', error);
+      console.error('Payment error:', error);
       alert('Payment failed. Please try again.');
       setProcessing(false);
     }
@@ -654,6 +425,10 @@ export default function NFCPaymentPage() {
 
   // Handle successful Stripe payment from modal
   const handleModalPaymentSuccess = async (paymentIntentId: string) => {
+    if (!orderData) {
+      console.error('No order data found');
+      return;
+    }
 
     setShowStripeModal(false);
     setProcessing(true);
@@ -683,7 +458,6 @@ export default function NFCPaymentPage() {
       localStorage.setItem('orderConfirmation', JSON.stringify(orderConfirmation));
 
       // Update existing order with payment details using process-order API
-
       const response = await fetch('/api/process-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -708,10 +482,9 @@ export default function NFCPaymentPage() {
             voucherDiscount: voucherDiscount || 0,
             voucherAmount: voucherAmount || 0,
           },
-          // FIXED: Send actual paid amount to ensure DB stores correct total
           pricing: {
             ...orderData.pricing,
-            total: getFinalAmount(), // Actual amount charged by Stripe
+            total: getFinalAmount(),
             totalBeforeDiscount: getSubtotal(),
             voucherAmount: voucherAmount || 0,
           }
@@ -722,7 +495,7 @@ export default function NFCPaymentPage() {
         throw new Error('Failed to process order');
       }
 
-      const result = await response.json();
+      await response.json();
 
       // Clear localStorage
       localStorage.removeItem('pendingOrder');
@@ -754,7 +527,6 @@ export default function NFCPaymentPage() {
     );
   }
 
-  const isIndia = orderData.shipping.country === 'IN' || orderData.shipping.country === 'India';
 
   // Show error message if no order found
   if (hasOrderError) {
@@ -795,185 +567,42 @@ export default function NFCPaymentPage() {
           {/* Payment Form - Left Side */}
           <div className="lg:col-span-2 order-2 lg:order-1">
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm p-4 sm:p-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Secure Payment</h2>
-              <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">Complete your purchase securely. All transactions are encrypted.</p>
-
-              {/* Payment Method Tabs */}
-              <div className="flex flex-col sm:flex-row gap-2 mb-4 sm:mb-6">
-                <button
-                  onClick={() => setPaymentMethod('card')}
-                  className="flex-1 py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all text-sm sm:text-base"
-                  style={{
-                    backgroundColor: paymentMethod === 'card' ? '#ff0000' : '#F3F4F6',
-                    color: paymentMethod === 'card' ? '#FFFFFF' : '#374151'
-                  }}
-                >
-                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 inline mr-2" />
-                  Pay with Card
-                </button>
-
-                {isIndia && (
-                  <button
-                    onClick={() => setPaymentMethod('upi')}
-                    className="flex-1 py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all text-sm sm:text-base"
-                    style={{
-                      backgroundColor: paymentMethod === 'upi' ? '#ff0000' : '#F3F4F6',
-                      color: paymentMethod === 'upi' ? '#FFFFFF' : '#374151'
-                    }}
-                  >
-                    <Smartphone className="w-4 h-4 sm:w-5 sm:h-5 inline mr-2" />
-                    UPI
-                  </button>
-                )}
+              {/* Header - Hidden on mobile */}
+              <div className="hidden lg:flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-gray-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Secure Payment</h2>
+                  <p className="text-xs sm:text-sm text-gray-500">Powered by Stripe</p>
+                </div>
               </div>
 
-              {/* Express Checkout (for card payment) */}
-              {paymentMethod === 'card' && (
-                <>
-                  <div className="mb-4 sm:mb-6">
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Express Checkout</h3>
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                      <button
-                        className="flex items-center justify-center py-2.5 sm:py-3 px-3 sm:px-4 border border-gray-300 rounded-lg transition-colors font-medium cursor-pointer text-sm sm:text-base"
-                        style={{ backgroundColor: '#ff0000', color: '#FFFFFF' }}
-                        onClick={() => alert('Apple Pay integration coming soon!')}
-                      >
-                        <img src="/apple_logo.png" alt="Apple" className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2" />
-                        <span>Pay</span>
-                      </button>
-                      <button
-                        className="flex items-center justify-center py-2.5 sm:py-3 px-3 sm:px-4 border border-gray-300 rounded-lg transition-colors font-medium text-sm sm:text-base"
-                        style={{ backgroundColor: '#FFFFFF', color: '#000000' }}
-                        onClick={() => alert('Google Pay integration coming soon!')}
-                      >
-                        <span className="text-lg sm:text-xl mr-1.5 sm:mr-2 font-bold">G</span>
-                        <span>Google Pay</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="relative mb-4 sm:mb-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-4 bg-white text-gray-500">OR</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Card Payment - Stripe Integration */}
-              {paymentMethod === 'card' && (
-                <div className="space-y-4 sm:space-y-6">
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Lock className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Secure Payment with Stripe
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      Your payment information is encrypted and secure. Click below to proceed to our secure payment form.
-                    </p>
-
-                    {/* Card Brand Logos */}
-                    <div className="flex items-center justify-center gap-3 mb-6">
-                      <div className="px-3 py-2 border border-gray-200 rounded bg-white">
-                        <Image
-                          src="/visa.png"
-                          alt="Visa"
-                          width={40}
-                          height={24}
-                          className="h-5 w-auto"
-                        />
-                      </div>
-                      <div className="px-3 py-2 border border-gray-200 rounded bg-white">
-                        <Image
-                          src="/mc.png"
-                          alt="Mastercard"
-                          width={35}
-                          height={24}
-                          className="h-5 w-auto"
-                        />
-                      </div>
-                      <div className="px-3 py-2 border border-gray-200 rounded bg-white">
-                        <Image
-                          src="/amex.png"
-                          alt="American Express"
-                          width={35}
-                          height={24}
-                          className="h-5 w-auto"
-                        />
-                      </div>
-                    </div>
-                  </div>
+              {/* Card Brand Logos - Hidden on mobile */}
+              <div className="hidden lg:flex items-center gap-2 mb-6">
+                <div className="px-2 py-1.5 border border-gray-200 rounded bg-white">
+                  <Image src="/visa.png" alt="Visa" width={32} height={20} className="h-4 w-auto" />
                 </div>
-              )}
-
-              {/* UPI Payment Form */}
-              {paymentMethod === 'upi' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Enter UPI ID
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={upiId}
-                        onChange={(e) => setUpiId(e.target.value)}
-                        placeholder="yourname@upi"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      />
-                      <Smartphone className="absolute right-3 top-3.5 w-5 h-5 text-gray-400" />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Supports: PhonePe, GPay, Paytm, BHIM, and all UPI apps
-                    </p>
-                  </div>
-
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h4 className="font-medium text-purple-900 mb-2">How UPI Payment Works:</h4>
-                    <ol className="text-sm text-purple-700 space-y-1">
-                      <li>1. Enter your UPI ID above</li>
-                      <li>2. Click "Pay Now"</li>
-                      <li>3. You'll receive a payment request on your UPI app</li>
-                      <li>4. Approve the payment in your UPI app</li>
-                      <li>5. Return here to see confirmation</li>
-                    </ol>
-                  </div>
-
-                  {showUpiQR && (
-                    <div className="bg-white border-2 border-purple-500 rounded-lg p-4 text-center">
-                      <h4 className="font-medium mb-2">Scan QR Code to Pay</h4>
-                      <div className="w-48 h-48 mx-auto bg-gray-200 rounded-lg flex items-center justify-center">
-                        {qrCodeUrl ? (
-                          <img
-                            src={qrCodeUrl}
-                            alt="UPI QR Code"
-                            className="w-full h-full rounded-lg"
-                          />
-                        ) : (
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 mt-2">
-                        Scan with any UPI app
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Amount: ${getFinalAmount().toFixed(2)}
-                      </p>
-                    </div>
-                  )}
+                <div className="px-2 py-1.5 border border-gray-200 rounded bg-white">
+                  <Image src="/mc.png" alt="Mastercard" width={28} height={20} className="h-4 w-auto" />
                 </div>
-              )}
+                <div className="px-2 py-1.5 border border-gray-200 rounded bg-white">
+                  <Image src="/amex.png" alt="Amex" width={28} height={20} className="h-4 w-auto" />
+                </div>
+              </div>
 
-              {/* Payment Button */}
+              {/* Payment Info - Hidden on mobile */}
+              <div className="hidden lg:block bg-gray-50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-600">
+                  Click the button below to securely enter your card details. Your payment is protected by industry-standard encryption.
+                </p>
+              </div>
+
+              {/* Payment Button - Always visible */}
               <button
                 onClick={handlePayment}
                 disabled={processing || !orderData?.orderId}
-                className="w-full mt-4 sm:mt-6 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 style={{
                   backgroundColor: (processing || !orderData?.orderId) ? '#D1D5DB' : '#ff0000',
                   color: '#FFFFFF'
@@ -991,14 +620,14 @@ export default function NFCPaymentPage() {
                 )}
               </button>
 
-              {/* Security Badges */}
-              <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-xs sm:text-sm text-gray-600">
+              {/* Security Badges - Hidden on mobile */}
+              <div className="hidden lg:flex mt-8 flex-row items-center justify-center gap-8 text-sm text-gray-600">
                 <div className="flex items-center">
-                  <Shield className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-500" />
+                  <Shield className="w-5 h-5 mr-2 text-blue-500" />
                   SSL Secure Connection
                 </div>
                 <div className="flex items-center">
-                  <Lock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-blue-500" />
+                  <Lock className="w-5 h-5 mr-2 text-blue-500" />
                   PCI DSS Compliant
                 </div>
               </div>
@@ -1108,7 +737,7 @@ export default function NFCPaymentPage() {
                   </>
                 )}
                 <div className="flex justify-between">
-                  <span>{isIndia ? 'GST (18%)' : 'VAT (5%)'}</span>
+                  <span>{(orderData.shipping.country === 'IN' || orderData.shipping.country === 'India') ? 'GST (18%)' : 'VAT (5%)'}</span>
                   <span>${orderData.pricing.taxAmount.toFixed(2)}</span>
                 </div>
 

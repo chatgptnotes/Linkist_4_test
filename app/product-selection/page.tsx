@@ -115,8 +115,16 @@ export default function ProductSelectionPage() {
       if (data.success && data.plans) {
         // Map database plans to ProductOption format
         // Filter out founders-club plans (they have a separate "Exclusive Access" card)
+        // Define desired order: Free first, then Personal
+        const planOrder: Record<string, number> = {
+          'digital-only': 1,      // Free - First
+          'physical-digital': 2,  // Personal - Second
+          'digital-with-app': 3,  // Digital + App - Third (if exists)
+        };
+
         const mappedPlans = data.plans
           .filter((plan: any) => plan.type !== 'founders-club')
+          .sort((a: any, b: any) => (planOrder[a.type] || 99) - (planOrder[b.type] || 99))
           .map((plan: any) => {
           const isPhysicalCardAllowed = plan.allowed_countries?.includes(userCountry) ?? true;
 
@@ -164,7 +172,22 @@ export default function ProductSelectionPage() {
   const getDefaultPlans = (): ProductOption[] => {
     const isPhysicalCardAllowed = ALLOWED_PHYSICAL_CARD_COUNTRIES.includes(userCountry);
 
+    // Order: Free first, then Personal
     return [
+      {
+        id: 'digital-only',
+        title: 'Free',
+        subtitle: 'Your professional identity - simple, shareable, sustainable.',
+        price: '$0',
+        priceLabel: 'Free',
+        icon: <User className="w-6 h-6" />,
+        features: [
+          'Digital profile',
+          'Basic analytics',
+          'Profile customization',
+          'Standard support'
+        ]
+      },
       {
         id: 'physical-digital',
         title: 'Physical NFC Card + Linkist App',
@@ -198,20 +221,6 @@ export default function ProductSelectionPage() {
           'Unlimited Profile Updates',
           'Analytics Dashboard',
           'Email Support'
-        ]
-      },
-      {
-        id: 'digital-only',
-        title: 'Free',
-        subtitle: 'Your professional identity - simple, shareable, sustainable.',
-        price: '$0',
-        priceLabel: 'Free',
-        icon: <User className="w-6 h-6" />,
-        features: [
-          'Digital profile',
-          'Basic analytics',
-          'Profile customization',
-          'Standard support'
         ]
       }
     ];

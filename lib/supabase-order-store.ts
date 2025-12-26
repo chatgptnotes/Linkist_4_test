@@ -497,15 +497,24 @@ export const SupabaseOrderStore = {
 export type OrderPlanType = 'digital-only' | 'digital-profile-app' | 'nfc-card-full';
 
 // Generate a cryptic order number based on plan type
+// Founders Club: LKFM-FC-{cryptic}
 // Digital Only: LKFM-DO-{cryptic}
 // Digital Profile + Linkist App: LKFM-DPLA-{cryptic}
 // NFC Digital Card + Digital Profile + Linkist App: LKFM-CDPLA-{cryptic}
-export const generateOrderNumber = async (planType: OrderPlanType = 'nfc-card-full'): Promise<string> => {
+export const generateOrderNumber = async (
+  planType: OrderPlanType = 'nfc-card-full',
+  isFoundersClub: boolean = false
+): Promise<string> => {
   // Generate cryptic number using industry best practices
   // Combine timestamp (6 chars) + random (4 chars) = 10 character cryptic string
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   const cryptic = `${timestamp}${random}`;
+
+  // Founders Club gets special prefix
+  if (isFoundersClub) {
+    return `LKFM-FC-${cryptic}`;
+  }
 
   // Determine prefix based on plan type
   let prefix = 'LKFM-CDPLA'; // Default: NFC Card + Digital Profile + Linkist App
